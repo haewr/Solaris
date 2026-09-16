@@ -1,0 +1,7 @@
+{
+  "name": "Solaris",
+  "description": "Solar energy viability and monitoring mobile app for Dumaguete City, Philippines with real NASA POWER satellite climatology, degradation math, and encrypted offline storage.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
