@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, Component, ErrorInfo, ReactNode } from 'react';
-import { PhoneSimulatorFrame } from './components/PhoneSimulatorFrame';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { SolarisMobileApp } from './components/mobile/SolarisMobileApp';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
@@ -59,23 +58,13 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 }
 
 export default function App() {
-  const [activeFormat, setActiveFormat] = useState<'phone' | 'tablet' | 'desktop'>('phone');
-  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
-
-  const handleToggleOrientation = () => {
-    setOrientation((prev) => (prev === 'portrait' ? 'landscape' : 'portrait'));
-  };
-
   return (
     <ErrorBoundary>
-      <PhoneSimulatorFrame
-        activeFormat={activeFormat}
-        onChangeFormat={setActiveFormat}
-        orientation={orientation}
-        onToggleOrientation={handleToggleOrientation}
-      >
-        <SolarisMobileApp />
-      </PhoneSimulatorFrame>
+      <div className="w-full h-full min-h-screen bg-slate-100 flex justify-center">
+        <div className="w-full max-w-lg h-full min-h-screen flex flex-col bg-slate-100 relative">
+          <SolarisMobileApp />
+        </div>
+      </div>
     </ErrorBoundary>
   );
 }

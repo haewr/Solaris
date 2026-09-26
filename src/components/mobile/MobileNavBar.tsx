@@ -18,7 +18,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ currentTab, onSelect
 
   return (
     <nav
-      className="bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around z-30 shrink-0 select-none"
+      className="bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] flex items-center justify-around z-30 shrink-0 select-none"
       id="solaris-mobile-bottom-nav"
     >
       {tabs.map((tab) => {
