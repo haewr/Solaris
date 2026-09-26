@@ -30,12 +30,9 @@ export const PhoneSimulatorFrame: React.FC<PhoneSimulatorFrameProps> = ({
   const [deviceModel, setDeviceModel] = useState<'iphone15' | 'pixel8'>('iphone15');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
-  if (activeFormat === 'desktop') {
-    return <div className="w-full min-h-screen">{children}</div>;
-  }
-
   const isPhone = activeFormat === 'phone';
   const isTablet = activeFormat === 'tablet';
+  const isDesktop = activeFormat === 'desktop';
 
   // Device dimensions
   let frameWidth = '393px';
@@ -57,6 +54,58 @@ export const PhoneSimulatorFrame: React.FC<PhoneSimulatorFrameProps> = ({
       frameWidth = '980px';
       frameHeight = '768px';
     }
+  }
+
+  if (isDesktop) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-start">
+        {/* Control bar above full screen */}
+        <div className="w-full bg-slate-800/90 border-b border-slate-700/80 backdrop-blur-md p-3 flex flex-wrap items-center justify-between gap-3 shadow-md z-30">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
+              <Monitor className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white tracking-wide">
+                  Full Screen Desktop View
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  Responsive Full Width
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-700">
+              <button
+                onClick={() => onChangeFormat('phone')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Phone</span>
+              </button>
+              <button
+                onClick={() => onChangeFormat('tablet')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all"
+              >
+                <Tablet className="w-3.5 h-3.5" />
+                <span>Tablet</span>
+              </button>
+              <button
+                onClick={() => onChangeFormat('desktop')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow-sm transition-all"
+              >
+                <Monitor className="w-3.5 h-3.5" />
+                <span>Full Screen</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="w-full flex-1 max-w-5xl mx-auto p-4 sm:p-6">{children}</div>
+      </div>
+    );
   }
 
   return (
@@ -111,11 +160,7 @@ export const PhoneSimulatorFrame: React.FC<PhoneSimulatorFrameProps> = ({
 
             <button
               onClick={() => onChangeFormat('desktop')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                activeFormat === 'desktop'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all"
             >
               <Monitor className="w-3.5 h-3.5" />
               <span>Full Screen</span>

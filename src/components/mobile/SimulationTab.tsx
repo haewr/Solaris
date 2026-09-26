@@ -202,7 +202,7 @@ export const SimulationTab: React.FC<SimulationTabProps> = ({
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800 text-[11px] text-slate-300">
                 <div>
-                  <span className="text-slate-400 block text-[10px]">Estimated Turnkey Cost:</span>
+                  <span className="text-slate-400 block text-[10px]">Total Installation Cost:</span>
                   <strong>₱{simulation.estimatedTurnkeyCostPhp.toLocaleString()}</strong>
                 </div>
                 <div>
@@ -219,7 +219,7 @@ export const SimulationTab: React.FC<SimulationTabProps> = ({
               {/* Payback Period */}
               <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 space-y-1">
                 <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
-                  Simple Payback Period
+                  System Payback Period
                 </span>
                 <div className="flex items-baseline gap-1">
                   <span className="text-2xl font-black font-['Space_Grotesk'] text-emerald-700">
@@ -273,7 +273,7 @@ export const SimulationTab: React.FC<SimulationTabProps> = ({
                 <span className="font-bold text-slate-800">
                   {simulation.annualDegradationPercent}% / yr compound
                 </span>
-                <p className="text-[10px] text-slate-400">Tropical Climate Derated</p>
+                <p className="text-[10px] text-slate-400">Tropical Heat & Cloud Derated</p>
               </div>
             </div>
 
@@ -465,7 +465,7 @@ export const SimulationTab: React.FC<SimulationTabProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[11px] font-bold text-slate-600 block">Turnkey Benchmark</label>
+              <label className="text-[11px] font-bold text-slate-600 block">Installation Cost Benchmark</label>
               <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
                 ₱{PHILIPPINES_TURNKEY_COST_PER_KWP_PHP.toLocaleString()} / kWp
               </div>
@@ -478,7 +478,7 @@ export const SimulationTab: React.FC<SimulationTabProps> = ({
             <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 flex items-center justify-between text-xs">
               <div className="space-y-0.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-800 block">
-                  Coupled Degradation Module (Step 5)
+                  Coupled Panel Aging & Degradation (Step 5)
                 </span>
                 <span className="text-[11px] text-indigo-900 font-medium">
                   Annual Rate: <strong>{degradationProfile.annualDegradationRatePercent}%/year</strong> (Installed {degradationProfile.installationDate})

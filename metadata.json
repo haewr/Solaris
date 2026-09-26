@@ -1,7 +1,6 @@
 {
-  "name": "Solaris",
-  "description": "Solar energy viability and monitoring mobile app for Dumaguete City, Philippines with real NASA POWER satellite climatology, degradation math, and encrypted offline storage.",
-  "requestFramePermissions": ["geolocation"],
+  "name": "Solaris - Solar Potential & Siting",
+  "description": "Advanced solar PV potential, rooftop siting, irradiance simulation, and financial ROI calculator for Dumaguete and Negros Oriental.",
+  "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
-

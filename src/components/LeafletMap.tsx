@@ -106,6 +106,7 @@ export const LeafletMap: React.FC<LeafletMapProps> = ({
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         {
           maxZoom: 20,
+          maxNativeZoom: 18,
           attribution: 'Esri World Imagery',
         }
       ).addTo(map);

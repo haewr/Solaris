@@ -313,7 +313,7 @@ export const FinancialRoiCalculator: React.FC<FinancialRoiCalculatorProps> = ({ 
 
             <div>
               <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                Solar Turnkey Cost / Wp
+                Installation Cost / Wp
               </label>
               <div className="relative">
                 <input
@@ -329,7 +329,7 @@ export const FinancialRoiCalculator: React.FC<FinancialRoiCalculatorProps> = ({ 
 
             <div>
               <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                Net Metering Export Credit
+                Excess Power Sold (Net Metering)
               </label>
               <div className="relative">
                 <input

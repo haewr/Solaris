@@ -30,6 +30,7 @@ export const SolarisMobileApp: React.FC = () => {
 
   // Roof Geometry State
   const [roof, setRoof] = useState<RoofDimensions>({
+    mode: 'dimensions',
     widthMeters: 7.0,
     lengthMeters: 8.0,
     totalAreaM2: 56.0,
@@ -79,6 +80,7 @@ export const SolarisMobileApp: React.FC = () => {
       addressName: DUMAGUETE_DEFAULT_COORDS.name,
     });
     setRoof({
+      mode: 'dimensions',
       widthMeters: 7.0,
       lengthMeters: 8.0,
       totalAreaM2: 56.0,

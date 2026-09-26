@@ -110,7 +110,7 @@ export const SitingMiniMap: React.FC<SitingMiniMapProps> = ({
     if (tileMode === 'satellite') {
       const satLayer = L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        { maxZoom: 19 }
+        { maxZoom: 19, maxNativeZoom: 18, attribution: 'Esri Satellite' }
       ).addTo(map);
       activeTileRef.current = satLayer;
     } else {
