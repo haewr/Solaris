@@ -5,7 +5,6 @@ import {
   Radio,
   Clock,
   AlertTriangle,
-  RefreshCw,
   Layers,
   Calendar,
 } from 'lucide-react';
@@ -77,29 +76,6 @@ export const LiveTab: React.FC<LiveTabProps> = ({
     };
   }, [location.latitude, location.longitude, roof.tiltDegrees, roof.azimuthDegrees, systemSizeKwp, isAirplaneMode]);
 
-  const handleManualRefresh = async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const res = await forecastSolarService.fetchForecast(
-        location.latitude,
-        location.longitude,
-        roof.tiltDegrees,
-        roof.azimuthDegrees,
-        systemSizeKwp || 3.5,
-        isAirplaneMode
-      );
-      setForecastData(res.data);
-      setIsFromCache(res.fromCache);
-      setCacheTimestamp(res.cacheTimestamp);
-      setRateStatus(forecastSolarService.getRateLimitStatus());
-    } catch (err: any) {
-      setErrorMessage(err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // Find current estimated output from real forecast.solar watts map
   let currentWatts = 0;
   let todayTotalKwh = 0;
@@ -155,7 +131,7 @@ export const LiveTab: React.FC<LiveTabProps> = ({
               <Radio className="w-4 h-4" />
             </div>
             <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Live Satellite Polling (15-Min Cadence)
+              Live Satellite Polling
             </span>
           </div>
           <span
@@ -169,16 +145,8 @@ export const LiveTab: React.FC<LiveTabProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
-          <span>Polling: 15-minute interval • Auto-sleep when backgrounded</span>
-          <button
-            onClick={handleManualRefresh}
-            disabled={isLoading || !rateStatus.canCallNow}
-            className="flex items-center gap-1 font-bold text-indigo-600 hover:text-indigo-800 disabled:opacity-40"
-          >
-            <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>{isLoading ? 'Querying...' : 'Poll Now'}</span>
-          </button>
+        <div className="text-[11px] text-slate-500 pt-0.5">
+          <span>Cadence: Automatic 15-minute interval • Auto-sleep when backgrounded</span>
         </div>
 
         {!rateStatus.canCallNow && (

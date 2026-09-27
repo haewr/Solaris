@@ -60,8 +60,8 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 export default function App() {
   return (
     <ErrorBoundary>
-      <div className="w-full h-full min-h-screen bg-slate-100 flex justify-center">
-        <div className="w-full max-w-lg h-full min-h-screen flex flex-col bg-slate-100 relative">
+      <div className="fixed inset-0 w-full h-full bg-slate-100 flex justify-center overflow-hidden">
+        <div className="w-full max-w-lg h-full flex flex-col bg-slate-100 relative overflow-hidden">
           <SolarisMobileApp />
         </div>
       </div>
