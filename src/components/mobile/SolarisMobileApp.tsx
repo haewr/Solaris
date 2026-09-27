@@ -4,6 +4,7 @@ import {
   RoofDimensions,
   NasaPowerClimatologyData,
   AppSettings,
+  SimulationUserInputs,
 } from '../../types/nativeSolaris';
 import { MobileHeader } from './MobileHeader';
 import { MobileNavBar, TabDestination } from './MobileNavBar';
@@ -15,27 +16,35 @@ import { BiometricLockModal } from './BiometricLockModal';
 import { biometricLockService, DEFAULT_APP_SETTINGS } from '../../services/biometricLockService';
 import { DUMAGUETE_DEFAULT_COORDS } from '../../services/nasaPowerService';
 import { encryptedStorage } from '../../services/encryptedStorageService';
+import {
+  DEFAULT_NORECO_II_TARIFF_PHP,
+  PHILIPPINES_TURNKEY_COST_PER_KWP_PHP,
+} from '../../services/simulationService';
+
+const DEFAULT_SIMULATION_INPUTS: SimulationUserInputs = {
+  systemSizeKwp: 0,
+  tariffPhp: 0,
+  costPerKwpPhp: 0,
+  years: 0,
+  activePage: 'parameters',
+  showFullTable: false,
+  hasUserCustomized: false,
+};
 
 export const SolarisMobileApp: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<TabDestination>('siting');
 
-  // Location State (Default: Dumaguete City, Negros Oriental, Philippines)
-  const [location, setLocation] = useState<LocationCoordinates>({
-    latitude: DUMAGUETE_DEFAULT_COORDS.latitude,
-    longitude: DUMAGUETE_DEFAULT_COORDS.longitude,
-    timestamp: Date.now(),
-    source: 'manual_pinpoint',
-    addressName: DUMAGUETE_DEFAULT_COORDS.name,
-  });
+  // Location State: Initially unpinned (null) so users can comfortably choose their own pinpoint location
+  const [location, setLocation] = useState<LocationCoordinates | null>(null);
 
-  // Roof Geometry State
+  // Roof Geometry State: Initially empty (0) dimensions so users enter their custom measurements
   const [roof, setRoof] = useState<RoofDimensions>({
     mode: 'dimensions',
-    widthMeters: 7.0,
-    lengthMeters: 8.0,
-    totalAreaM2: 56.0,
-    usableAreaM2: 42.0, // 75% usable area after setbacks
-    tiltDegrees: 12, // 12° optimal for Dumaguete (9.3° N)
+    widthMeters: 0,
+    lengthMeters: 0,
+    totalAreaM2: 0,
+    usableAreaM2: 0,
+    tiltDegrees: 12, // Standard optimal tilt indicator for Dumaguete (9.3° N)
     azimuthDegrees: 180, // True South
     orientationName: 'South (180° Optimal)',
   });
@@ -46,7 +55,40 @@ export const SolarisMobileApp: React.FC = () => {
   // App Settings & Local Security
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [isLocked, setIsLocked] = useState(false);
-  const [recommendedKwp, setRecommendedKwp] = useState<number>(3.5);
+  const [recommendedKwp, setRecommendedKwp] = useState<number>(0);
+
+  // Simulation Inputs State: Starts initially empty, persists user edits across tab switches
+  const [simulationInputs, setSimulationInputs] = useState<SimulationUserInputs>(() => {
+    try {
+      const saved = localStorage.getItem('solaris_simulation_inputs');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.hasUserCustomized) {
+          return {
+            systemSizeKwp: typeof parsed.systemSizeKwp === 'number' ? parsed.systemSizeKwp : 0,
+            tariffPhp: typeof parsed.tariffPhp === 'number' ? parsed.tariffPhp : 0,
+            costPerKwpPhp: typeof parsed.costPerKwpPhp === 'number' ? parsed.costPerKwpPhp : 0,
+            years: typeof parsed.years === 'number' ? parsed.years : 0,
+            activePage: parsed.activePage === 'results' ? 'results' : 'parameters',
+            showFullTable: Boolean(parsed.showFullTable),
+            hasUserCustomized: Boolean(parsed.hasUserCustomized),
+          };
+        }
+      }
+    } catch (e) {
+      // fallback to default
+    }
+    return DEFAULT_SIMULATION_INPUTS;
+  });
+
+  // Save simulation inputs whenever changed
+  useEffect(() => {
+    try {
+      localStorage.setItem('solaris_simulation_inputs', JSON.stringify(simulationInputs));
+    } catch (e) {
+      // ignore storage error
+    }
+  }, [simulationInputs]);
 
   // Initialize Encrypted Storage & Device Gate on mount
   useEffect(() => {
@@ -65,33 +107,35 @@ export const SolarisMobileApp: React.FC = () => {
 
   const handleNasaDataFetched = (data: NasaPowerClimatologyData, fromCache: boolean, cacheTs?: number) => {
     setNasaData(data);
-    // Recommended kWp = Usable Area (42m²) * 20% panel efficiency ≈ 8.4 kWp or roof proportion
-    const rec = Math.round(roof.usableAreaM2 * 0.20 * 10) / 10;
-    setRecommendedKwp(rec);
+    if (roof.usableAreaM2 > 0) {
+      const rec = Math.round(roof.usableAreaM2 * 0.20 * 10) / 10;
+      setRecommendedKwp(rec);
+    }
   };
 
   const handleResetAllData = () => {
-    // Reset to initial clean state
-    setLocation({
-      latitude: DUMAGUETE_DEFAULT_COORDS.latitude,
-      longitude: DUMAGUETE_DEFAULT_COORDS.longitude,
-      timestamp: Date.now(),
-      source: 'manual_pinpoint',
-      addressName: DUMAGUETE_DEFAULT_COORDS.name,
-    });
+    // Reset to initial clean, unpinned state
+    setLocation(null);
     setRoof({
       mode: 'dimensions',
-      widthMeters: 7.0,
-      lengthMeters: 8.0,
-      totalAreaM2: 56.0,
-      usableAreaM2: 42.0,
+      widthMeters: 0,
+      lengthMeters: 0,
+      totalAreaM2: 0,
+      usableAreaM2: 0,
       tiltDegrees: 12,
       azimuthDegrees: 180,
       orientationName: 'South (180° Optimal)',
     });
     setNasaData(null);
+    setRecommendedKwp(0);
     setSettings(DEFAULT_APP_SETTINGS);
     setIsLocked(false);
+    setSimulationInputs(DEFAULT_SIMULATION_INPUTS);
+    try {
+      localStorage.removeItem('solaris_simulation_inputs');
+    } catch (e) {
+      // ignore
+    }
     setCurrentTab('siting');
   };
 
@@ -134,6 +178,8 @@ export const SolarisMobileApp: React.FC = () => {
             recommendedKwp={recommendedKwp}
             isAirplaneMode={settings.airplaneModeSimulated}
             onNavigateToSettings={() => setCurrentTab('settings')}
+            simulationInputs={simulationInputs}
+            onChangeSimulationInputs={setSimulationInputs}
           />
         )}
 
@@ -141,7 +187,7 @@ export const SolarisMobileApp: React.FC = () => {
           <LiveTab
             location={location}
             roof={roof}
-            systemSizeKwp={recommendedKwp}
+            systemSizeKwp={simulationInputs.systemSizeKwp || recommendedKwp}
             isAirplaneMode={settings.airplaneModeSimulated}
           />
         )}

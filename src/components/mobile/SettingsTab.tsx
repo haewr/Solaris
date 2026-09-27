@@ -1,25 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import {
   Shield,
-  ShieldCheck,
-  Database,
   Trash2,
   Lock,
-  Unlock,
-  KeyRound,
   Plane,
-  MapPin,
-  HelpCircle,
-  FileText,
-  AlertTriangle,
   CheckCircle2,
   Calendar,
-  BookOpen,
-  RefreshCw,
 } from 'lucide-react';
 import { AppSettings, DegradationProfile } from '../../types/nativeSolaris';
 import { encryptedStorage } from '../../services/encryptedStorageService';
-import { degradationService, NREL_LITERATURE_CITATION } from '../../services/degradationService';
+import { degradationService } from '../../services/degradationService';
 import { biometricLockService } from '../../services/biometricLockService';
 
 interface SettingsTabProps {
@@ -33,7 +23,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onUpdateSettings,
   onResetAllData,
 }) => {
-  const [storageStats, setStorageStats] = useState(encryptedStorage.getStorageStats());
   const [degProfile, setDegProfile] = useState<DegradationProfile | null>(null);
   const [installDate, setInstallDate] = useState('');
   const [degRate, setDegRate] = useState(0.70);
@@ -49,10 +38,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   }, []);
 
   const loadSettingsAndDegradation = async () => {
-    setStorageStats(encryptedStorage.getStorageStats());
     const profile = await degradationService.getProfile();
     setDegProfile(profile);
-    setInstallDate(profile.installationDate);
+    // Keep initially empty unless user explicitly set a profile date
+    setInstallDate('');
     setDegRate(profile.annualDegradationRatePercent);
   };
 
@@ -60,7 +49,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     if (!installDate) return;
     const updated = await degradationService.saveProfile(installDate, degRate);
     setDegProfile(updated);
-    setStorageStats(encryptedStorage.getStorageStats());
     setSaveSuccessMsg('Degradation parameters saved & synchronized.');
     setTimeout(() => setSaveSuccessMsg(null), 3000);
   };
@@ -101,7 +89,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   const handleRevokeLocation = async () => {
     // Purge cached siting queries
     encryptedStorage.deleteItem('solaris_last_siting_location');
-    setStorageStats(encryptedStorage.getStorageStats());
     onUpdateSettings({ ...settings, locationPermissionGranted: false });
     setSaveSuccessMsg('Location cache cleared & permission reset.');
     setTimeout(() => setSaveSuccessMsg(null), 3000);
@@ -133,7 +120,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               <span className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
                 Simulate Airplane / Offline Mode
               </span>
-              <span className="text-[10px] text-slate-500 font-medium">Verify Step 1 offline cache resilience</span>
+              <span className="text-[10px] text-slate-500 font-medium">Verify offline cache resilience</span>
             </div>
           </div>
 
@@ -153,64 +140,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         </p>
       </div>
 
-      {/* 2. Step 1: Encrypted Storage Manager (AES-GCM & LRU) */}
-      <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <Database className="w-4 h-4" />
-            </div>
-            <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Encrypted Local Storage (Step 1)
-            </span>
-          </div>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-            AES-GCM 256-bit
-          </span>
-        </div>
-
-        {/* Quota Gauge */}
-        <div className="space-y-1.5 p-3 rounded-2xl bg-slate-50 border border-slate-200/80">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-600">Storage Footprint:</span>
-            <span className="font-mono font-bold text-slate-800">
-              {(storageStats.totalSizeBytes / 1024).toFixed(1)} KB / {(storageStats.maxSizeBytes / (1024 * 1024)).toFixed(0)} MB ({storageStats.percentUsed}% used)
-            </span>
-          </div>
-          <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-            <div
-              className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${Math.max(1, storageStats.percentUsed)}%` }}
-            />
-          </div>
-          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-            <span>Automatic LRU Eviction Active</span>
-            <span>Total Vault Records: {storageStats.totalEntries}</span>
-          </div>
-        </div>
-
-        {/* Record Breakdown */}
-        <div className="grid grid-cols-4 gap-2 text-center text-[10px]">
-          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200">
-            <span className="text-slate-400 block font-semibold">Siting</span>
-            <strong className="text-slate-800 text-xs font-mono">{storageStats.entriesByCategory.siting || 0}</strong>
-          </div>
-          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200">
-            <span className="text-slate-400 block font-semibold">Sim</span>
-            <strong className="text-slate-800 text-xs font-mono">{storageStats.entriesByCategory.simulation || 0}</strong>
-          </div>
-          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200">
-            <span className="text-slate-400 block font-semibold">Live</span>
-            <strong className="text-slate-800 text-xs font-mono">{storageStats.entriesByCategory.live || 0}</strong>
-          </div>
-          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200">
-            <span className="text-slate-400 block font-semibold">Config</span>
-            <strong className="text-slate-800 text-xs font-mono">{storageStats.entriesByCategory.settings || 0}</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Step 5: Degradation Module Parameters */}
+      {/* 2. Solar Degradation Module Parameters */}
       <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -218,10 +148,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               <Calendar className="w-4 h-4" />
             </div>
             <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Solar Degradation Module (Step 5)
+              Solar Degradation Module
             </span>
           </div>
-          <span className="text-[10px] font-bold text-slate-500">NREL Sourced</span>
         </div>
 
         <div className="space-y-3">
@@ -236,7 +165,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               onChange={(e) => setInstallDate(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
             />
-            {degProfile && (
+            {installDate && degProfile && (
               <span className="text-[10px] text-slate-500 font-medium block">
                 Calculated system age: <strong>{degProfile.systemAgeYears} years</strong> (Retention: {(degProfile.degradationRetentionFactor * 100).toFixed(2)}%)
               </span>
@@ -265,14 +194,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </div>
           </div>
 
-          {/* Literature Citation */}
-          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[10px] text-slate-600 flex items-start gap-2">
-            <BookOpen className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-            <p className="leading-tight">
-              <strong>Cited Field Study:</strong> Jordan & Kurtz (2012 / 2016), NREL Compendium of Photovoltaic Degradation Rates. Tropical climates show an empirical median rate of 0.70%/yr.
-            </p>
-          </div>
-
           <button
             onClick={handleSaveDegradation}
             className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs active:scale-98 transition-all"
@@ -282,7 +203,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
       </div>
 
-      {/* 4. Local Biometric & Device Lock */}
+      {/* 3. Local Biometric & Device Lock */}
       <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -353,7 +274,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         )}
       </div>
 
-      {/* 5. Philippines Data Privacy Act (RA 10173) & Purge Controls */}
+      {/* 4. Philippines Data Privacy Act (RA 10173) & Purge Controls */}
       <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3.5">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">

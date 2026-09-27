@@ -1,20 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Maximize2, MapPin, Layers } from 'lucide-react';
+import { Maximize2, MapPin, Layers, MousePointerClick } from 'lucide-react';
+import { DUMAGUETE_DEFAULT_COORDS } from '../../services/nasaPowerService';
 
 interface SitingMiniMapProps {
-  latitude: number;
-  longitude: number;
-  addressName: string;
+  latitude?: number;
+  longitude?: number;
+  addressName?: string;
+  hasPin: boolean;
   onOpenPinpoint: () => void;
+  onPinAtCoordinates?: (lat: number, lng: number) => void;
 }
 
 export const SitingMiniMap: React.FC<SitingMiniMapProps> = ({
-  latitude,
-  longitude,
-  addressName,
+  latitude = DUMAGUETE_DEFAULT_COORDS.latitude,
+  longitude = DUMAGUETE_DEFAULT_COORDS.longitude,
+  addressName = 'No location pinned yet',
+  hasPin,
   onOpenPinpoint,
+  onPinAtCoordinates,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -22,11 +27,8 @@ export const SitingMiniMap: React.FC<SitingMiniMapProps> = ({
   const [tileMode, setTileMode] = useState<'streets' | 'satellite'>('streets');
   const activeTileRef = useRef<L.TileLayer | null>(null);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    // Custom DivIcon marker
-    const pinIcon = L.divIcon({
+  const createPinIcon = () => {
+    return L.divIcon({
       className: 'siting-pin-marker',
       html: `
         <div style="background-color: #4f46e5; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.45); border: 2.5px solid white;">
@@ -39,11 +41,18 @@ export const SitingMiniMap: React.FC<SitingMiniMapProps> = ({
       iconSize: [32, 32],
       iconAnchor: [16, 32],
     });
+  };
 
-    // Initialize Map with zoom controls disabled for mini preview
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const initialCenter: [number, number] = hasPin
+      ? [latitude, longitude]
+      : [DUMAGUETE_DEFAULT_COORDS.latitude, DUMAGUETE_DEFAULT_COORDS.longitude];
+
     const map = L.map(containerRef.current, {
-      center: [latitude, longitude],
-      zoom: 16,
+      center: initialCenter,
+      zoom: hasPin ? 16 : 13,
       zoomControl: false,
       attributionControl: false,
     });
@@ -54,11 +63,22 @@ export const SitingMiniMap: React.FC<SitingMiniMapProps> = ({
     }).addTo(map);
     activeTileRef.current = streetLayer;
 
-    const marker = L.marker([latitude, longitude], { icon: pinIcon }).addTo(map);
-    marker.on('click', onOpenPinpoint);
+    // Only create marker if a pin has been set by user
+    if (hasPin) {
+      const marker = L.marker([latitude, longitude], { icon: createPinIcon() }).addTo(map);
+      marker.on('click', onOpenPinpoint);
+      markerRef.current = marker;
+    }
+
+    map.on('click', (e) => {
+      if (onPinAtCoordinates) {
+        onPinAtCoordinates(e.latlng.lat, e.latlng.lng);
+      } else {
+        onOpenPinpoint();
+      }
+    });
 
     mapRef.current = map;
-    markerRef.current = marker;
 
     // Fix localhost / iframe layout: trigger invalidateSize immediately & on frame
     const refreshSize = () => {
@@ -89,14 +109,29 @@ export const SitingMiniMap: React.FC<SitingMiniMapProps> = ({
     };
   }, []);
 
-  // Update map coordinates when props change
+  // Update map coordinates & marker state when props change
   useEffect(() => {
-    if (mapRef.current && markerRef.current) {
-      mapRef.current.setView([latitude, longitude], 16, { animate: true });
-      markerRef.current.setLatLng([latitude, longitude]);
-      mapRef.current.invalidateSize();
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (hasPin) {
+      map.setView([latitude, longitude], 16, { animate: true });
+      if (markerRef.current) {
+        markerRef.current.setLatLng([latitude, longitude]);
+      } else {
+        const marker = L.marker([latitude, longitude], { icon: createPinIcon() }).addTo(map);
+        marker.on('click', onOpenPinpoint);
+        markerRef.current = marker;
+      }
+    } else {
+      // Remove marker if unpinned
+      if (markerRef.current) {
+        map.removeLayer(markerRef.current);
+        markerRef.current = null;
+      }
     }
-  }, [latitude, longitude]);
+    map.invalidateSize();
+  }, [hasPin, latitude, longitude]);
 
   // Handle tile switch
   useEffect(() => {
@@ -128,10 +163,9 @@ export const SitingMiniMap: React.FC<SitingMiniMapProps> = ({
       {/* Map canvas */}
       <div
         ref={containerRef}
-        className="w-full h-full cursor-pointer z-0"
+        className="w-full h-full cursor-crosshair z-0"
         style={{ height: '100%', width: '100%', minHeight: '190px' }}
-        onClick={onOpenPinpoint}
-        title="Click to open interactive pinpoint map"
+        title={hasPin ? 'Click to adjust pin' : 'Click to drop pin on your location'}
       />
 
       {/* Satellite / Street toggle */}
@@ -172,22 +206,39 @@ export const SitingMiniMap: React.FC<SitingMiniMapProps> = ({
         onClick={onOpenPinpoint}
         className="absolute top-2 right-2 z-10 px-2.5 py-1 rounded-xl bg-white/95 hover:bg-white text-slate-700 text-[10px] font-bold border border-slate-200 shadow-xs flex items-center gap-1 active:scale-95 transition-all"
       >
-        <Maximize2 className="w-3 h-3 text-indigo-600" />
-        <span>Adjust Pin</span>
+        {hasPin ? (
+          <>
+            <Maximize2 className="w-3 h-3 text-indigo-600" />
+            <span>Adjust Pin</span>
+          </>
+        ) : (
+          <>
+            <MousePointerClick className="w-3 h-3 text-indigo-600" />
+            <span>Drop Pin</span>
+          </>
+        )}
       </button>
 
       {/* Coordinate bar */}
       <div
         onClick={onOpenPinpoint}
-        className="absolute bottom-2 left-2 right-2 z-10 bg-white/95 backdrop-blur-sm px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-xs text-[10px] flex items-center justify-between cursor-pointer hover:bg-white transition-colors"
+        className={`absolute bottom-2 left-2 right-2 z-10 backdrop-blur-sm px-2.5 py-1.5 rounded-xl border shadow-xs text-[10px] flex items-center justify-between cursor-pointer transition-colors ${
+          hasPin
+            ? 'bg-white/95 border-slate-200 text-slate-800 hover:bg-white'
+            : 'bg-indigo-600/90 text-white border-indigo-400 hover:bg-indigo-600'
+        }`}
       >
         <div className="flex items-center gap-1.5 truncate mr-2">
-          <MapPin className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-          <span className="font-semibold text-slate-800 truncate">{addressName}</span>
+          <MapPin className={`w-3.5 h-3.5 shrink-0 ${hasPin ? 'text-indigo-600' : 'text-white animate-bounce'}`} />
+          <span className="font-semibold truncate">
+            {hasPin ? addressName : 'Tap map or use button to pinpoint your rooftop'}
+          </span>
         </div>
-        <span className="font-mono text-slate-500 shrink-0 font-medium">
-          {latitude.toFixed(4)}°, {longitude.toFixed(4)}°
-        </span>
+        {hasPin && (
+          <span className="font-mono text-slate-500 shrink-0 font-medium">
+            {latitude.toFixed(4)}°, {longitude.toFixed(4)}°
+          </span>
+        )}
       </div>
     </div>
   );

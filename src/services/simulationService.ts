@@ -25,7 +25,8 @@ export class SimulationService {
     nasaData: NasaPowerClimatologyData,
     degradationProfile: DegradationProfile,
     gridTariffPhp: number = DEFAULT_NORECO_II_TARIFF_PHP,
-    simulationYears: number = 25
+    simulationYears: number = 25,
+    costPerKwpPhp: number = PHILIPPINES_TURNKEY_COST_PER_KWP_PHP
   ): Promise<FinancialSimulation> {
     // 1. Calculate baseline Year 1 generation from real NASA irradiance:
     // Daily Peak Sun Hours (PSH) = nasaData.annualDailyKwhM2 (kWh/m²/day)
@@ -35,8 +36,9 @@ export class SimulationService {
     const year1DailyKwh = systemSizeKwp * pshDaily * pr;
     const year1AnnualKwh = year1DailyKwh * 365.25;
 
-    // 2. Capital cost estimate
-    const estimatedTurnkeyCostPhp = Math.round(systemSizeKwp * PHILIPPINES_TURNKEY_COST_PER_KWP_PHP);
+    // 2. Capital cost estimate (using user-defined or default cost per kWp)
+    const effectiveCostPerKwp = costPerKwpPhp > 0 ? costPerKwpPhp : PHILIPPINES_TURNKEY_COST_PER_KWP_PHP;
+    const estimatedTurnkeyCostPhp = Math.round(systemSizeKwp * effectiveCostPerKwp);
     const panelCount = Math.ceil((systemSizeKwp * 1000) / 450); // 450W modern panels
 
     // 3. 25-Year cashflow projection with annual degradation from Step 5
@@ -88,6 +90,7 @@ export class SimulationService {
       systemSizeKwp,
       panelCount,
       estimatedTurnkeyCostPhp,
+      costPerKwpPhp: effectiveCostPerKwp,
       gridTariffPhpPerKwh: gridTariffPhp,
       annualDegradationPercent: degradationProfile.annualDegradationRatePercent,
       simulationYears,
@@ -100,7 +103,7 @@ export class SimulationService {
     };
 
     // Cache simulation in Step 1 encrypted storage for offline access
-    const cacheKey = `simulation_${systemSizeKwp}kwp_${gridTariffPhp.toFixed(2)}`;
+    const cacheKey = `simulation_${systemSizeKwp}kwp_${gridTariffPhp.toFixed(2)}_${effectiveCostPerKwp}_${simulationYears}yr`;
     await encryptedStorage.setItem(cacheKey, simulation, 'simulation', 30 * 24 * 60 * 60 * 1000);
 
     return simulation;

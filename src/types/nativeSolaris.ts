@@ -77,6 +77,7 @@ export interface FinancialSimulation {
   systemSizeKwp: number;
   panelCount: number;
   estimatedTurnkeyCostPhp: number;
+  costPerKwpPhp?: number;
   gridTariffPhpPerKwh: number; // NORECO II default ~12.15 PHP
   annualDegradationPercent: number;
   simulationYears: number; // 1 to 25
@@ -92,6 +93,16 @@ export interface FinancialSimulation {
     cumulativeSavingsPhp: number;
     netCashflowPhp: number;
   }>;
+}
+
+export interface SimulationUserInputs {
+  systemSizeKwp: number;
+  tariffPhp: number;
+  costPerKwpPhp: number;
+  years: number;
+  activePage: 'results' | 'parameters';
+  showFullTable: boolean;
+  hasUserCustomized: boolean;
 }
 
 export interface ForecastSolarPayload {
