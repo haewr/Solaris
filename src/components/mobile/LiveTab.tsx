@@ -6,23 +6,17 @@ import {
   Clock,
   AlertTriangle,
   RefreshCw,
-  Cpu,
-  ShieldCheck,
-  BatteryCharging,
   Layers,
-  CheckCircle2,
   Calendar,
 } from 'lucide-react';
 import {
   ForecastSolarPayload,
-  InverterHardwareConnection,
   LocationCoordinates,
   RoofDimensions,
   DegradationProfile,
 } from '../../types/nativeSolaris';
 import { forecastSolarService } from '../../services/forecastSolarService';
 import { degradationService } from '../../services/degradationService';
-import { HardwareGatewaySetupSheet } from './HardwareGatewaySetupSheet';
 
 interface LiveTabProps {
   location: LocationCoordinates;
@@ -43,11 +37,6 @@ export const LiveTab: React.FC<LiveTabProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [rateStatus, setRateStatus] = useState(forecastSolarService.getRateLimitStatus());
-  const [hardwareConnection, setHardwareConnection] = useState<InverterHardwareConnection>({
-    status: 'disconnected',
-    brand: 'none',
-  });
-  const [showGatewaySheet, setShowGatewaySheet] = useState(false);
   const [degProfile, setDegProfile] = useState<DegradationProfile | null>(null);
 
   // Load degradation profile on mount
@@ -268,70 +257,6 @@ export const LiveTab: React.FC<LiveTabProps> = ({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Honest Inverter Hardware Connection Card */}
-      <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
-              <Cpu className="w-4 h-4" />
-            </div>
-            <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Physical Inverter Telemetry
-            </span>
-          </div>
-          <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              hardwareConnection.status === 'connected'
-                ? 'bg-emerald-100 text-emerald-800'
-                : 'bg-slate-100 text-slate-600'
-            }`}
-          >
-            {hardwareConnection.status === 'connected' ? 'Gateway Linked' : 'No Device Connected'}
-          </span>
-        </div>
-
-        {hardwareConnection.status === 'disconnected' ? (
-          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-2">
-            <p className="text-slate-600 leading-relaxed text-[11px]">
-              <strong>No on-premise inverter connected.</strong> Solaris does not fake or simulate inverter telemetry with artificial sliders. To view internal MPPT string voltages, inverter temperatures, or live AC feed-in, configure your gateway.
-            </p>
-            <button
-              onClick={() => setShowGatewaySheet(true)}
-              className="w-full py-2.5 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200 transition-colors flex items-center justify-center gap-1.5"
-            >
-              <Cpu className="w-3.5 h-3.5" />
-              <span>Connect Physical Gateway (Modbus / Envoy / SolarEdge)</span>
-            </button>
-          </div>
-        ) : (
-          <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs space-y-2">
-            <div className="flex items-center justify-between">
-              <strong className="text-emerald-900 font-bold">
-                Linked: {hardwareConnection.brand.toUpperCase()}
-              </strong>
-              <span className="text-[10px] text-emerald-700 font-mono">
-                Host: {hardwareConnection.gatewayIpOrHost || 'Cloud'}
-              </span>
-            </div>
-            <button
-              onClick={() => setShowGatewaySheet(true)}
-              className="text-[11px] font-bold text-emerald-800 underline hover:text-emerald-950"
-            >
-              Modify Gateway Settings
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Gateway Sheet Modal */}
-      {showGatewaySheet && (
-        <HardwareGatewaySetupSheet
-          connection={hardwareConnection}
-          onSaveConnection={(conn) => setHardwareConnection(conn)}
-          onClose={() => setShowGatewaySheet(false)}
-        />
       )}
     </div>
   );
