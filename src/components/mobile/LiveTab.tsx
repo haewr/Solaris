@@ -16,6 +16,32 @@ import {
 import { forecastSolarService } from '../../services/forecastSolarService';
 import { degradationService } from '../../services/degradationService';
 
+// Helper to parse forecast.solar timestamps ("YYYY-MM-DD HH:mm:ss") in the site timezone
+const parseForecastTimestamp = (str: string, timezone = 'Asia/Manila'): number => {
+  if (str.includes('+') || str.endsWith('Z')) {
+    return new Date(str).getTime();
+  }
+  const isoLike = str.replace(' ', 'T');
+  // Asia/Manila is UTC+8 with no daylight saving time
+  const offset = timezone === 'Asia/Manila' ? '+08:00' : '';
+  const parsed = new Date(isoLike + offset).getTime();
+  return isNaN(parsed) ? new Date(isoLike).getTime() : parsed;
+};
+
+// Helper to obtain date string ("YYYY-MM-DD") in the site's local timezone
+const getTodayDateStringInTz = (timezone = 'Asia/Manila'): string => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().substring(0, 10);
+  }
+};
+
 interface LiveTabProps {
   location: LocationCoordinates | null;
   roof: RoofDimensions;
@@ -100,43 +126,74 @@ export const LiveTab: React.FC<LiveTabProps> = ({
   let nextPeakTime = '';
   let maxWattsToday = 0;
 
-  if (forecastData && forecastData.watts) {
-    const nowIso = new Date();
-    const currentHourStr = nowIso.toISOString().substring(0, 13); // "YYYY-MM-DDTHH"
-    const todayDateStr = nowIso.toISOString().substring(0, 10);
+  const siteTimezone = forecastData?.meta?.timezone || 'Asia/Manila';
+  const todayDateStr = getTodayDateStringInTz(siteTimezone);
 
-    // Look up closest hour
-    for (const [timeStr, val] of Object.entries(forecastData.watts)) {
-      const watts = typeof val === 'number' ? val : Number(val) || 0;
-      if (timeStr.startsWith(todayDateStr)) {
-        if (watts > maxWattsToday) {
-          maxWattsToday = watts;
-          nextPeakTime = timeStr.substring(11, 16);
+  if (forecastData && forecastData.watts) {
+    const nowMs = Date.now();
+
+    // Parse all points into sorted timeline
+    const points = Object.entries(forecastData.watts)
+      .map(([timeStr, val]) => ({
+        timeStr,
+        ms: parseForecastTimestamp(timeStr, siteTimezone),
+        watts: typeof val === 'number' ? val : Number(val) || 0,
+      }))
+      .sort((a, b) => a.ms - b.ms);
+
+    // Compute peak power and peak time for today
+    for (const p of points) {
+      if (p.timeStr.startsWith(todayDateStr)) {
+        if (p.watts > maxWattsToday) {
+          maxWattsToday = p.watts;
+          const timePart = p.timeStr.includes(' ')
+            ? p.timeStr.split(' ')[1]
+            : p.timeStr.split('T')[1] || '';
+          nextPeakTime = timePart.substring(0, 5);
         }
       }
-      if (timeStr.startsWith(currentHourStr)) {
-        currentWatts = watts;
+    }
+
+    // Determine current instantaneous watts by interpolating between nearest forecast points
+    if (points.length > 0) {
+      const firstPoint = points[0];
+      const lastPoint = points[points.length - 1];
+
+      if (nowMs >= firstPoint.ms && nowMs <= lastPoint.ms) {
+        for (let i = 0; i < points.length - 1; i++) {
+          const p1 = points[i];
+          const p2 = points[i + 1];
+          if (nowMs >= p1.ms && nowMs <= p2.ms) {
+            const timeDiff = p2.ms - p1.ms;
+            if (timeDiff > 0) {
+              const ratio = (nowMs - p1.ms) / timeDiff;
+              currentWatts = Math.max(0, Math.round(p1.watts + ratio * (p2.watts - p1.watts)));
+            } else {
+              currentWatts = Math.max(0, p1.watts);
+            }
+            break;
+          }
+        }
+      } else {
+        // Outside daylight hours
+        currentWatts = 0;
       }
     }
 
     // Daily total from watt_hours_day, consistently in kWh
     if (forecastData.watt_hours_day) {
-      const wh = forecastData.watt_hours_day[todayDateStr] || Object.values(forecastData.watt_hours_day)[0] || 0;
+      const wh =
+        forecastData.watt_hours_day[todayDateStr] ||
+        Object.values(forecastData.watt_hours_day)[0] ||
+        0;
       todayTotalKwh = Math.round((wh / 1000) * 10) / 10;
     }
   }
 
   // Extract Today and Next Day forecast details
-  const now = new Date();
-  const todayIso = now.toISOString().substring(0, 10);
-
-  const tomorrowDateObj = new Date(now);
-  tomorrowDateObj.setDate(tomorrowDateObj.getDate() + 1);
-  const tomorrowIso = tomorrowDateObj.toISOString().substring(0, 10);
-
   const availableDayKeys = Object.keys(forecastData?.watt_hours_day || {}).sort();
-  const todayKey = availableDayKeys.find((k) => k === todayIso) || availableDayKeys[0] || todayIso;
-  const nextDayKey = availableDayKeys.find((k) => k > todayKey) || availableDayKeys[1] || tomorrowIso;
+  const todayKey = availableDayKeys.find((k) => k === todayDateStr) || availableDayKeys[0] || todayDateStr;
+  const nextDayKey = availableDayKeys.find((k) => k > todayKey) || availableDayKeys[1] || todayKey;
 
   const parseDayForecast = (dateStr: string, isToday: boolean, isTomorrow: boolean) => {
     const wh = forecastData?.watt_hours_day?.[dateStr] || 0;
@@ -244,16 +301,30 @@ export const LiveTab: React.FC<LiveTabProps> = ({
           <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
             Current Generation Estimate
           </span>
+          <span
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              currentWatts > 0
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {currentWatts > 0 ? 'Active Solar Generation' : 'Standby / Overnight'}
+          </span>
         </div>
 
         {/* Clean Dark Box: ONLY the amount of watts */}
-        <div className="py-7 px-4 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-center shadow-inner">
+        <div className="py-7 px-4 rounded-2xl bg-slate-900 text-white flex flex-col items-center justify-center text-center shadow-inner gap-1">
           <div className="flex items-baseline justify-center gap-2">
             <span className="text-5xl sm:text-6xl font-black font-['Space_Grotesk'] text-amber-300 tracking-tight">
               {currentWatts.toLocaleString()}
             </span>
             <span className="text-xl sm:text-2xl font-bold text-amber-400">Watts</span>
           </div>
+          {currentWatts === 0 && (
+            <p className="text-[11px] text-slate-400 font-medium">
+              Panels are currently on standby outside daylight hours (sunrise ~05:35 AM)
+            </p>
+          )}
         </div>
 
         {/* Daily Total & Peak - Energy consistently kept at kWh */}
