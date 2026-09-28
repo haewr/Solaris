@@ -1,10 +1,10 @@
 /**
  * Step 4 — Live-Generation Monitoring Service (Real forecast.solar API Integration)
- * 
+ *
  * Strict specifications:
  * - 15-minute polling interval
  * - Strict Rate Limiter: Hard cap of 12 calls/hour per IP address via sliding 1-hour window token tracking
- * - Event-driven: Stops polling when tab/app is backgrounded or screen inactive (saves battery and RAM)
+ * - Event-driven: Stops polling when tab/app is backgrounded or screen inactive
  * - Feeds Step 5 degradation retention factor
  * - Clearly distinguishes real satellite forecast from actual physical inverter telemetry
  * - Offline fallback: Returns cached reading from Step 1 encrypted storage with visible timestamp
@@ -17,7 +17,8 @@ import { degradationService } from './degradationService';
 const FORECAST_CACHE_KEY = 'solaris_forecast_solar_cache';
 const RATE_LIMIT_STORAGE_KEY = 'solaris_forecast_solar_rate_history';
 const MAX_CALLS_PER_HOUR = 12;
-const POLLING_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes = 4 calls/hour under normal polling
+const POLLING_INTERVAL_MS = 15 * 60 * 1000;
+const CACHE_FRESHNESS_MS = 15 * 60 * 1000;
 
 export class ForecastSolarService {
   private timerId: any = null;
@@ -33,9 +34,6 @@ export class ForecastSolarService {
   private onUpdateCallback: ((data: ForecastSolarPayload, fromCache: boolean) => void) | null = null;
   private onErrorCallback: ((err: Error) => void) | null = null;
 
-  /**
-   * Retrieves array of timestamps of calls made within the past 60 minutes
-   */
   private getRecentCallTimestamps(): number[] {
     try {
       const raw = localStorage.getItem(RATE_LIMIT_STORAGE_KEY);
@@ -48,18 +46,12 @@ export class ForecastSolarService {
     }
   }
 
-  /**
-   * Records a new outbound call timestamp
-   */
   private recordCallTimestamp(): void {
     const timestamps = this.getRecentCallTimestamps();
     timestamps.push(Date.now());
     localStorage.setItem(RATE_LIMIT_STORAGE_KEY, JSON.stringify(timestamps));
   }
 
-  /**
-   * Checks whether a call is allowed under the 12 calls/hour hard limit
-   */
   getRateLimitStatus(): {
     callsInPastHour: number;
     limitPerHour: number;
@@ -72,7 +64,6 @@ export class ForecastSolarService {
 
     let secondsUntilNextAvailable = 0;
     if (!canCallNow && timestamps.length > 0) {
-      // Oldest timestamp in window will expire at oldest + 3600000
       const oldest = Math.min(...timestamps);
       const expiresAt = oldest + 3600000;
       secondsUntilNextAvailable = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
@@ -86,18 +77,14 @@ export class ForecastSolarService {
     };
   }
 
-  /**
-   * Calls the real forecast.solar API for Dumaguete City coordinates
-   */
   async fetchForecast(
     lat: number,
     lng: number,
-    tilt: number, // declination / pitch
-    azimuth: number, // In forecast.solar: -180 = North, -90 = East, 0 = South, 90 = West
+    tilt: number,
+    azimuth: number,
     kwp: number,
     isAirplaneMode = false
   ): Promise<{ data: ForecastSolarPayload; fromCache: boolean; cacheTimestamp?: number }> {
-    // 1. If Airplane Mode / Offline is simulated, strictly return cached reading
     if (isAirplaneMode) {
       const cached = await encryptedStorage.getItem<ForecastSolarPayload>(FORECAST_CACHE_KEY);
       if (cached) {
@@ -108,7 +95,16 @@ export class ForecastSolarService {
       );
     }
 
-    // 2. Strict Rate Limiting Check (<= 12 calls/hour)
+    // Freshness window: skip API call if we fetched recently
+    const freshCached = await encryptedStorage.getItem<ForecastSolarPayload>(FORECAST_CACHE_KEY);
+    if (freshCached && Date.now() - freshCached.meta.timestamp < CACHE_FRESHNESS_MS) {
+      return {
+        data: freshCached.data,
+        fromCache: true,
+        cacheTimestamp: freshCached.meta.timestamp,
+      };
+    }
+
     const rateStatus = this.getRateLimitStatus();
     if (!rateStatus.canCallNow) {
       console.warn(`forecast.solar rate limit reached (12 calls/hr). Serving cached data.`);
@@ -121,10 +117,6 @@ export class ForecastSolarService {
       );
     }
 
-    // 3. Convert standard compass azimuth (0° North, 180° South) to forecast.solar convention (-180° N to +180° N, 0° S)
-    // Compass 180 (South) -> forecast.solar 0
-    // Compass 90 (East) -> forecast.solar -90
-    // Compass 270 (West) -> forecast.solar 90
     let fsAzimuth = azimuth - 180;
     if (fsAzimuth > 180) fsAzimuth -= 360;
     if (fsAzimuth < -180) fsAzimuth += 360;
@@ -138,18 +130,32 @@ export class ForecastSolarService {
     )}/${fsTilt}/${fsAzimuth}/${fsKwp}`;
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      // Try twice: forecast.solar is EU-hosted and can be slow from PH.
+      let response: Response | null = null;
+      let lastErr: any = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        try {
+          response = await fetch(url, {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          break;
+        } catch (e: any) {
+          clearTimeout(timeoutId);
+          lastErr = e;
+          if (attempt === 1) {
+            await new Promise((r) => setTimeout(r, 1500));
+            continue;
+          }
+          throw e;
+        }
+      }
+      if (!response) throw lastErr || new Error('No response from forecast.solar');
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      // Record outbound call for rate limiter
       this.recordCallTimestamp();
 
       if (!response.ok) {
@@ -166,11 +172,9 @@ export class ForecastSolarService {
         throw new Error('forecast.solar API response missing watts structure.');
       }
 
-      // 4. Retrieve Step 5 degradation retention factor to apply to forecast output
       const degProfile = await degradationService.getProfile();
       const retention = degProfile.degradationRetentionFactor;
 
-      // Apply degradation factor to watts and watt_hours
       const degradedWatts: Record<string, number> = {};
       for (const [timeStr, wattsVal] of Object.entries(res.watts as Record<string, number>)) {
         degradedWatts[timeStr] = Math.round(wattsVal * retention);
@@ -202,12 +206,10 @@ export class ForecastSolarService {
         fetchedAt: Date.now(),
       };
 
-      // Save real forecast in Step 1 encrypted storage (24 hour TTL)
       await encryptedStorage.setItem(FORECAST_CACHE_KEY, payload, 'live', 24 * 60 * 60 * 1000);
 
       return { data: payload, fromCache: false };
     } catch (err: any) {
-      // Connectivity loss fallback: Return last real cached reading
       const cached = await encryptedStorage.getItem<ForecastSolarPayload>(FORECAST_CACHE_KEY);
       if (cached) {
         return { data: cached.data, fromCache: true, cacheTimestamp: cached.meta.timestamp };
@@ -218,10 +220,6 @@ export class ForecastSolarService {
     }
   }
 
-  /**
-   * Starts event-driven polling with a 15-minute interval.
-   * Capped to <= 12 calls/hr. Stops immediately when app/screen is backgrounded.
-   */
   startPolling(
     lat: number,
     lng: number,
@@ -238,26 +236,20 @@ export class ForecastSolarService {
     this.onErrorCallback = onError;
     this.isPollingActive = true;
 
-    // Trigger immediate first fetch
     this.executeSinglePoll();
 
-    // Set 15-minute timer (4 calls/hour)
     this.timerId = setInterval(() => {
       if (document.visibilityState === 'visible') {
         this.executeSinglePoll();
       }
     }, POLLING_INTERVAL_MS);
 
-    // Attach visibilitychange listener for battery and memory efficiency
     if (!this.visibilityListenerAttached && typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', this.handleVisibilityChange);
       this.visibilityListenerAttached = true;
     }
   }
 
-  /**
-   * Halts all timers and listeners when screen is unmounted
-   */
   stopPolling(): void {
     if (this.timerId) {
       clearInterval(this.timerId);
@@ -276,13 +268,11 @@ export class ForecastSolarService {
 
   private handleVisibilityChange = (): void => {
     if (document.visibilityState === 'hidden') {
-      // App backgrounded: freeze polling to avoid battery drain
       if (this.timerId) {
         clearInterval(this.timerId);
         this.timerId = null;
       }
     } else if (document.visibilityState === 'visible' && this.isPollingActive) {
-      // App foregrounded: restart 15-min interval and check if poll needed
       this.executeSinglePoll();
       if (!this.timerId) {
         this.timerId = setInterval(() => {

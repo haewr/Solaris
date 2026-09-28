@@ -1,8 +1,33 @@
+# Dependencies
 node_modules/
+
+# Build output
 build/
 dist/
 coverage/
+
+# Capacitor native project
+android/
+ios/
+
+# Gradle & IDE
+.gradle/
+.idea/
+*.iml
+local.properties
+
+# APKs and keystores
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# OS
 .DS_Store
+
+# Logs
 *.log
+
+# Environment
 .env*
 !.env.example

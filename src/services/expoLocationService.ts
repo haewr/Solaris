@@ -1,18 +1,5 @@
-/**
- * Expo Location Service
- * 
- * Provides an Expo-compatible Location API (matching expo-location specifications):
- * - requestForegroundPermissionsAsync()
- * - getForegroundPermissionsAsync()
- * - getCurrentPositionAsync(options)
- * - reverseGeocodeAsync({ latitude, longitude })
- * - LocationAccuracy enum
- * 
- * Seamlessly interfaces with:
- * 1. Native Expo / React Native environment (if running inside Expo Go or WebView bridge)
- * 2. Web browser / PWA environment via W3C Geolocation API & Reverse Geocoding
- */
-
+import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
 import { LocationCoordinates } from '../types/nativeSolaris';
 
 export enum LocationAccuracy {
@@ -67,82 +54,67 @@ export interface LocationGeocodedAddress {
   formattedAddress?: string;
 }
 
+const isNativePlatform = Capacitor.isNativePlatform();
+
 class ExpoLocationService {
-  /**
-   * Request permission for foreground location access
-   * Specifically called when user taps "Acquire Device Location"
-   */
   async requestForegroundPermissionAsync(): Promise<LocationPermissionResponse> {
     return this.requestForegroundPermissionsAsync();
   }
 
-  /**
-   * Request permission for foreground location access (standard Expo plural naming)
-   */
   async requestForegroundPermissionsAsync(): Promise<LocationPermissionResponse> {
-    // If native Expo Location bridge is available in window / React Native
-    const nativeExpo = (window as any).ExpoLocation || (window as any).expo?.location || (window as any).Location;
-    if (nativeExpo) {
-      if (typeof nativeExpo.requestForegroundPermissionAsync === 'function') {
-        return await nativeExpo.requestForegroundPermissionAsync();
-      }
-      if (typeof nativeExpo.requestForegroundPermissionsAsync === 'function') {
-        return await nativeExpo.requestForegroundPermissionsAsync();
+    // 1. Native Capacitor platform (Android / iOS APK)
+    if (isNativePlatform) {
+      try {
+        const result = await Geolocation.requestPermissions();
+        const granted =
+          result.location === 'granted' || (result as any).coarseLocation === 'granted';
+        return {
+          status: granted ? 'granted' : 'denied',
+          granted,
+          canAskAgain: !granted,
+          expires: 'never',
+        };
+      } catch (err) {
+        console.warn('Capacitor Geolocation permission request failed:', err);
       }
     }
 
-    if (!('geolocation' in navigator)) {
-      return {
-        status: 'denied',
-        granted: false,
-        canAskAgain: false,
-        expires: 'never',
-      };
+    // 2. Web fallback
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+      return { status: 'denied', granted: false, canAskAgain: false, expires: 'never' };
     }
 
-    // Try checking via navigator.permissions if supported
     if (navigator.permissions && navigator.permissions.query) {
       try {
-        const queryRes = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
-        if (queryRes.state === 'granted') {
+        const q = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+        if (q.state === 'granted') {
           return { status: 'granted', granted: true, canAskAgain: true, expires: 'never' };
         }
-        if (queryRes.state === 'denied') {
+        if (q.state === 'denied') {
           return { status: 'denied', granted: false, canAskAgain: false, expires: 'never' };
         }
       } catch {
-        // Fall back to prompt execution
+        // Permissions API unsupported for geolocation → fall through.
       }
     }
 
-    // Directly trigger browser geolocation prompt on user interaction
     return new Promise((resolve) => {
+      let settled = false;
+      const finish = (r: LocationPermissionResponse) => {
+        if (!settled) { settled = true; resolve(r); }
+      };
+      const timeoutId = setTimeout(() => {
+        finish({ status: 'granted', granted: true, canAskAgain: true, expires: 'never' });
+      }, 9000);
+
       navigator.geolocation.getCurrentPosition(
-        () => {
-          resolve({
-            status: 'granted',
-            granted: true,
-            canAskAgain: true,
-            expires: 'never',
-          });
-        },
-        (error) => {
-          if (error.code === 1) {
-            // PERMISSION_DENIED
-            resolve({
-              status: 'denied',
-              granted: false,
-              canAskAgain: false,
-              expires: 'never',
-            });
+        () => { clearTimeout(timeoutId); finish({ status: 'granted', granted: true, canAskAgain: true, expires: 'never' }); },
+        (err) => {
+          clearTimeout(timeoutId);
+          if (err.code === 1) {
+            finish({ status: 'denied', granted: false, canAskAgain: false, expires: 'never' });
           } else {
-            // Timeout or position unavailable still implies permission was not outright denied
-            resolve({
-              status: 'granted',
-              granted: true,
-              canAskAgain: true,
-              expires: 'never',
-            });
+            finish({ status: 'granted', granted: true, canAskAgain: true, expires: 'never' });
           }
         },
         { timeout: 8000, maximumAge: 60000 }
@@ -150,28 +122,28 @@ class ExpoLocationService {
     });
   }
 
-  /**
-   * Check existing permission status (singular alias)
-   */
   async getForegroundPermissionAsync(): Promise<LocationPermissionResponse> {
     return this.getForegroundPermissionsAsync();
   }
 
-  /**
-   * Check existing permission status
-   */
   async getForegroundPermissionsAsync(): Promise<LocationPermissionResponse> {
-    const nativeExpo = (window as any).ExpoLocation || (window as any).expo?.location || (window as any).Location;
-    if (nativeExpo) {
-      if (typeof nativeExpo.getForegroundPermissionAsync === 'function') {
-        return await nativeExpo.getForegroundPermissionAsync();
-      }
-      if (typeof nativeExpo.getForegroundPermissionsAsync === 'function') {
-        return await nativeExpo.getForegroundPermissionsAsync();
+    if (isNativePlatform) {
+      try {
+        const result = await Geolocation.checkPermissions();
+        const granted =
+          result.location === 'granted' || (result as any).coarseLocation === 'granted';
+        return {
+          status: granted ? 'granted' : result.location === 'denied' ? 'denied' : 'undetermined',
+          granted,
+          canAskAgain: result.location !== 'denied',
+          expires: 'never',
+        };
+      } catch {
+        // fall through
       }
     }
 
-    if (!('geolocation' in navigator)) {
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
       return { status: 'denied', granted: false, canAskAgain: false, expires: 'never' };
     }
 
@@ -185,23 +157,36 @@ class ExpoLocationService {
           expires: 'never',
         };
       } catch {
-        // query not supported
+        // fall through
       }
     }
-
     return { status: 'undetermined', granted: false, canAskAgain: true, expires: 'never' };
   }
 
-  /**
-   * Acquire current device position matching Expo Location specs
-   */
   async getCurrentPositionAsync(options: LocationOptions = {}): Promise<LocationObject> {
-    const nativeExpo = (window as any).ExpoLocation || (window as any).expo?.location;
-    if (nativeExpo && typeof nativeExpo.getCurrentPositionAsync === 'function') {
-      return await nativeExpo.getCurrentPositionAsync(options);
+    // 1. Native Capacitor platform
+    if (isNativePlatform) {
+      const pos = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: options.timeout ?? 12000,
+        maximumAge: options.maximumAge ?? 30000,
+      });
+      return {
+        coords: {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          altitude: pos.coords.altitude ?? null,
+          accuracy: pos.coords.accuracy ?? null,
+          altitudeAccuracy: pos.coords.altitudeAccuracy ?? null,
+          heading: pos.coords.heading ?? null,
+          speed: pos.coords.speed ?? null,
+        },
+        timestamp: pos.timestamp ?? Date.now(),
+      };
     }
 
-    if (!('geolocation' in navigator)) {
+    // 2. Web fallback
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
       throw new Error('Geolocation is not supported on this device or browser.');
     }
 
@@ -228,15 +213,20 @@ class ExpoLocationService {
       navigator.geolocation.getCurrentPosition(
         onSuccess,
         (err) => {
-          // If high accuracy timed out, retry once with balanced/low accuracy
           if (highAccuracy && (err.code === 3 || err.code === 2)) {
             navigator.geolocation.getCurrentPosition(
               onSuccess,
               (fallbackErr) => {
-                reject(new Error(`Location timeout: ${fallbackErr.message}`));
+                if (fallbackErr.code === 1) {
+                  reject(new Error('Location permission denied. Enable Location in Android Settings for this app.'));
+                } else {
+                  reject(new Error(`Location error: ${fallbackErr.message || 'unavailable'}`));
+                }
               },
               { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
             );
+          } else if (err.code === 1) {
+            reject(new Error('Location permission denied. Enable Location in Android Settings for this app.'));
           } else {
             reject(new Error(err.message || 'Failed to acquire location.'));
           }
@@ -246,24 +236,13 @@ class ExpoLocationService {
     });
   }
 
-  /**
-   * Reverse geocodes coordinates to a human-readable address
-   */
-  async reverseGeocodeAsync(coords: { latitude: number; longitude: number }): Promise<LocationGeocodedAddress[]> {
-    const nativeExpo = (window as any).ExpoLocation || (window as any).expo?.location;
-    if (nativeExpo && typeof nativeExpo.reverseGeocodeAsync === 'function') {
-      try {
-        return await nativeExpo.reverseGeocodeAsync(coords);
-      } catch {
-        // fallback to web reverse geocode
-      }
-    }
-
+  async reverseGeocodeAsync(coords: {
+    latitude: number;
+    longitude: number;
+  }): Promise<LocationGeocodedAddress[]> {
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.latitude.toFixed(6)}&lon=${coords.longitude.toFixed(6)}&zoom=18&addressdetails=1`;
-      const res = await fetch(url, {
-        headers: { 'Accept': 'application/json' },
-      });
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
 
       if (res.ok) {
         const json = await res.json();
@@ -277,68 +256,55 @@ class ExpoLocationService {
         const postalCode = addr.postcode || null;
         const name = addr.amenity || addr.building || addr.shop || street || district || null;
 
-        // Build clean formatted display string
         const parts: string[] = [];
         if (name && name !== street) parts.push(name);
         if (street) parts.push(street);
         if (district) parts.push(district);
         if (city) parts.push(city);
 
-        const formattedAddress = parts.length > 0 ? parts.join(', ') : json.display_name?.split(',').slice(0, 3).join(',') || `${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E`;
+        const formattedAddress =
+          parts.length > 0
+            ? parts.join(', ')
+            : json.display_name?.split(',').slice(0, 3).join(',') ||
+              `${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E`;
 
         return [{
-          city,
-          district,
+          city, district,
           streetNumber: addr.house_number || null,
-          street,
-          region,
+          street, region,
           subregion: addr.county || null,
-          country,
-          postalCode,
-          name,
+          country, postalCode, name,
           formattedAddress,
         }];
       }
     } catch {
-      // ignore network errors for reverse geocoding
+      // ignore, fall through
     }
 
     return [{
       city: 'Dumaguete',
-      district: null,
-      streetNumber: null,
-      street: null,
-      region: 'Negros Oriental',
-      subregion: null,
-      country: 'Philippines',
-      postalCode: null,
-      name: null,
+      district: null, streetNumber: null, street: null,
+      region: 'Negros Oriental', subregion: null,
+      country: 'Philippines', postalCode: null, name: null,
       formattedAddress: `Device Location (${coords.latitude.toFixed(4)}°N, ${coords.longitude.toFixed(4)}°E)`,
     }];
   }
 
-  /**
-   * High-level helper: requests permissions, acquires current coordinates via Expo Location,
-   * reverse-geocodes the address, and returns a verified Solaris LocationCoordinates payload.
-   */
   async acquireSolarisLocation(options: LocationOptions = {}): Promise<LocationCoordinates> {
-    // 1. Ensure permissions
     const permission = await this.requestForegroundPermissionsAsync();
     if (!permission.granted) {
       throw new Error('Location permission was denied. Please allow location access in your device settings.');
     }
 
-    // 2. Acquire position
     const pos = await this.getCurrentPositionAsync({
       accuracy: options.accuracy ?? LocationAccuracy.High,
-      timeout: options.timeout ?? 9000,
+      timeout: options.timeout ?? 12000,
     });
 
     const lat = pos.coords.latitude;
     const lng = pos.coords.longitude;
     const accuracy = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : 10;
 
-    // 3. Reverse geocode to get a clean, human-readable address
     let addressName = `Device GPS Location (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E, ±${accuracy}m)`;
     try {
       const geocoded = await this.reverseGeocodeAsync({ latitude: lat, longitude: lng });
@@ -346,7 +312,7 @@ class ExpoLocationService {
         addressName = `${geocoded[0].formattedAddress} (±${accuracy}m)`;
       }
     } catch {
-      // keep fallback addressName
+      // keep fallback
     }
 
     return {
@@ -363,9 +329,6 @@ class ExpoLocationService {
 
 export const expoLocationService = new ExpoLocationService();
 
-/**
- * Standard Expo Location namespace export matching `import * as Location from 'expo-location'`
- */
 export const Location = {
   requestForegroundPermissionAsync: () => expoLocationService.requestForegroundPermissionAsync(),
   requestForegroundPermissionsAsync: () => expoLocationService.requestForegroundPermissionsAsync(),
@@ -375,8 +338,3 @@ export const Location = {
   reverseGeocodeAsync: (coords: { latitude: number; longitude: number }) => expoLocationService.reverseGeocodeAsync(coords),
   Accuracy: LocationAccuracy,
 };
-
-if (typeof window !== 'undefined') {
-  (window as any).Location = Location;
-  (window as any).ExpoLocation = Location;
-}

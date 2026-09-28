@@ -6,6 +6,7 @@ import {
   Clock,
   TrendingUp,
   TrendingDown,
+  Loader2,
 } from 'lucide-react';
 import {
   ForecastSolarPayload,
@@ -154,28 +155,23 @@ export const LiveTab: React.FC<LiveTabProps> = ({
       }
     }
 
-    // Determine current instantaneous watts by interpolating between nearest forecast points
+    // Snap to nearest forecast point — stable value between visits
     if (points.length > 0) {
       const firstPoint = points[0];
       const lastPoint = points[points.length - 1];
 
       if (nowMs >= firstPoint.ms && nowMs <= lastPoint.ms) {
-        for (let i = 0; i < points.length - 1; i++) {
-          const p1 = points[i];
-          const p2 = points[i + 1];
-          if (nowMs >= p1.ms && nowMs <= p2.ms) {
-            const timeDiff = p2.ms - p1.ms;
-            if (timeDiff > 0) {
-              const ratio = (nowMs - p1.ms) / timeDiff;
-              currentWatts = Math.max(0, Math.round(p1.watts + ratio * (p2.watts - p1.watts)));
-            } else {
-              currentWatts = Math.max(0, p1.watts);
-            }
-            break;
+        let closest = points[0];
+        let closestDelta = Math.abs(nowMs - closest.ms);
+        for (const p of points) {
+          const delta = Math.abs(nowMs - p.ms);
+          if (delta < closestDelta) {
+            closest = p;
+            closestDelta = delta;
           }
         }
+        currentWatts = Math.max(0, closest.watts);
       } else {
-        // Outside daylight hours
         currentWatts = 0;
       }
     }
@@ -255,7 +251,7 @@ export const LiveTab: React.FC<LiveTabProps> = ({
   const nextDayForecast = parseDayForecast(nextDayKey, false, true);
 
   // Fallback if next day is not yet populated by API
-  if (nextDayForecast.totalKwh === 0 && todayForecast.totalKwh > 0) {
+  if ((nextDayForecast.totalKwh === 0 || nextDayKey === todayKey) && todayForecast.totalKwh > 0) {
     nextDayForecast.totalKwh = Math.round(todayForecast.totalKwh * 1.05 * 10) / 10;
     nextDayForecast.peakWatts = Math.round(todayForecast.peakWatts * 1.03);
     nextDayForecast.peakTime = todayForecast.peakTime;
@@ -281,7 +277,7 @@ export const LiveTab: React.FC<LiveTabProps> = ({
           <div className="leading-tight">
             <strong>Showing Last Real Cached Reading</strong>
             <span className="block text-[10px] text-amber-700">
-              Fetched from satellite {cacheTimestamp ? new Date(cacheTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'earlier'}. No connection active.
+              Fetched from satellite {cacheTimestamp ? new Date(cacheTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'earlier'}.
             </span>
           </div>
         </div>
@@ -301,6 +297,12 @@ export const LiveTab: React.FC<LiveTabProps> = ({
           <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
             Current Generation Estimate
           </span>
+          {isLoading ? (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>Fetching...</span>
+          </span>
+        ) : (
           <span
             className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
               currentWatts > 0
@@ -310,20 +312,35 @@ export const LiveTab: React.FC<LiveTabProps> = ({
           >
             {currentWatts > 0 ? 'Active Solar Generation' : 'Standby / Overnight'}
           </span>
+        )}
         </div>
 
         {/* Clean Dark Box: ONLY the amount of watts */}
         <div className="py-7 px-4 rounded-2xl bg-slate-900 text-white flex flex-col items-center justify-center text-center shadow-inner gap-1">
-          <div className="flex items-baseline justify-center gap-2">
-            <span className="text-5xl sm:text-6xl font-black font-['Space_Grotesk'] text-amber-300 tracking-tight">
-              {currentWatts.toLocaleString()}
-            </span>
-            <span className="text-xl sm:text-2xl font-bold text-amber-400">Watts</span>
-          </div>
-          {currentWatts === 0 && (
-            <p className="text-[11px] text-slate-400 font-medium">
-              Panels are currently on standby outside daylight hours (sunrise ~05:35 AM)
-            </p>
+          {isLoading && !forecastData ? (
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="w-9 h-9 animate-spin text-amber-300" />
+              <span className="text-sm text-slate-300 font-medium">
+                Fetching solar forecast from forecast.solar...
+              </span>
+              <span className="text-[10px] text-slate-500">
+                This usually takes 5–15 seconds
+              </span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-baseline justify-center gap-2">
+                <span className="text-5xl sm:text-6xl font-black font-['Space_Grotesk'] text-amber-300 tracking-tight">
+                  {currentWatts.toLocaleString()}
+                </span>
+                <span className="text-xl sm:text-2xl font-bold text-amber-400">Watts</span>
+              </div>
+              {currentWatts === 0 && (
+                <p className="text-[11px] text-slate-400 font-medium">
+                  On standby outside daylight hours (sunrise ~05:35 AM)
+                </p>
+              )}
+            </>
           )}
         </div>
 
