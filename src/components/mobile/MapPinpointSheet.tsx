@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { LocationCoordinates } from '../../types/nativeSolaris';
 import { DUMAGUETE_DEFAULT_COORDS } from '../../services/nasaPowerService';
-import { expoLocationService, Location, LocationAccuracy } from '../../services/expoLocationService';
+import { Location, expoLocationService, LocationAccuracy } from '../../services/expoLocationService';
 import { LocationPermissionModal } from './LocationPermissionModal';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -239,36 +239,48 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
     }
   };
 
-  // Robust Expo Location acquisition
+  // Expo Location acquisition calling Location.requestForegroundPermissionAsync() directly on user tap
   const handleAcquireGps = async () => {
     setIsGpsLocating(true);
     setGpsError(null);
 
     try {
-      // Explicitly call Location.requestForegroundPermissionAsync() specifically on acquire tap
-      const perm = await Location.requestForegroundPermissionAsync();
-      if (!perm.granted) {
+      // Specifically call Location.requestForegroundPermissionAsync() when user taps
+      const permission = await Location.requestForegroundPermissionAsync();
+
+      if (!permission.granted && permission.status !== 'granted') {
         setGpsError('Location permission was denied. Please allow location access in your device settings.');
-        setShowPermissionModal(true);
+        setShowPermissionModal(false);
         return;
       }
 
-      const loc = await expoLocationService.acquireSolarisLocation({
-        accuracy: LocationAccuracy.High,
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
         timeout: 9000,
       });
-      updateMapPosition(loc.latitude, loc.longitude, loc.addressName);
+
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const accuracy = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : 10;
+
+      let address = `Device GPS Fix (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E, ±${accuracy}m)`;
+      try {
+        const geocoded = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+        if (geocoded.length > 0 && geocoded[0].formattedAddress) {
+          address = `${geocoded[0].formattedAddress} (±${accuracy}m)`;
+        }
+      } catch {
+        // preserve address
+      }
+
+      updateMapPosition(lat, lng, address);
       setShowPermissionModal(false);
     } catch (err: any) {
       setGpsError(err.message || 'Unable to acquire device location via Expo Location.');
+      setShowPermissionModal(false);
     } finally {
       setIsGpsLocating(false);
     }
-  };
-
-  const handleLocationButtonClick = async () => {
-    // Specifically trigger Expo Location permission request on tap of acquire device location
-    await handleAcquireGps();
   };
 
   const handleSave = () => {
@@ -313,12 +325,12 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={handleLocationButtonClick}
+                onClick={handleAcquireGps}
                 disabled={isGpsLocating}
                 className="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-all disabled:opacity-60"
               >
                 <Navigation className={`w-3.5 h-3.5 ${isGpsLocating ? 'animate-spin' : ''}`} />
-                <span>{isGpsLocating ? 'Acquiring Device Location...' : 'Acquire Device Location'}</span>
+                <span>{isGpsLocating ? 'Acquiring Device Location...' : 'Use Device Location (Expo)'}</span>
               </button>
             </div>
 

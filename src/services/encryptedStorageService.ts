@@ -14,8 +14,8 @@ const MASTER_SALT_KEY = 'solaris_master_salt';
 const MAX_STORAGE_BYTES = 10 * 1024 * 1024; // 10 Megabytes fixed cap
 
 // Helper: Convert ArrayBuffer to Hex and Base64
-function bufferToHex(buffer: ArrayBuffer | ArrayBufferLike): string {
-  return Array.from(new Uint8Array(buffer as ArrayBuffer))
+function bufferToHex(buffer: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buffer))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 }
@@ -85,7 +85,7 @@ class EncryptedStorageService {
       this.cryptoKey = await window.crypto.subtle.deriveKey(
         {
           name: 'PBKDF2',
-          salt: (this.salt as unknown as BufferSource),
+          salt: this.salt,
           iterations: 100000,
           hash: 'SHA-256',
         },

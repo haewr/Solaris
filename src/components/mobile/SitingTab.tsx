@@ -28,7 +28,7 @@ import {
   SolarMathCalculation,
 } from '../../types/nativeSolaris';
 import { nasaPowerService, DUMAGUETE_DEFAULT_COORDS } from '../../services/nasaPowerService';
-import { expoLocationService, Location, LocationAccuracy } from '../../services/expoLocationService';
+import { Location, expoLocationService, LocationAccuracy } from '../../services/expoLocationService';
 import { MapPinpointSheet } from './MapPinpointSheet';
 import { SitingMiniMap } from './SitingMiniMap';
 import { LocationPermissionModal } from './LocationPermissionModal';
@@ -99,25 +99,50 @@ export const SitingTab: React.FC<SitingTabProps> = ({
     onChangeLocation(newLoc);
   };
 
-  // Expo Location acquisition
-  const handleAcquireExpoLocation = async () => {
+  // Expo Location acquisition calling Location.requestForegroundPermissionAsync() directly on user tap
+  const handleAcquireDeviceLocation = async () => {
     setGpsLoading(true);
     setGpsError(null);
 
     try {
-      // Explicitly call Location.requestForegroundPermissionAsync() specifically when acquiring device location
-      const perm = await Location.requestForegroundPermissionAsync();
-      if (!perm.granted) {
+      // Specifically call Location.requestForegroundPermissionAsync() when the user taps on acquire device location
+      const permission = await Location.requestForegroundPermissionAsync();
+      
+      if (!permission.granted && permission.status !== 'granted') {
         setGpsError('Location permission was denied. Please allow location access in your device settings.');
-        setShowPermissionModal(true);
+        setShowPermissionModal(false);
         return;
       }
 
-      const loc = await expoLocationService.acquireSolarisLocation({
-        accuracy: LocationAccuracy.High,
+      // Permission granted: acquire coordinates and reverse-geocode
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
         timeout: 9000,
       });
-      handleLocationConfirmed(loc);
+
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const accuracy = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : 10;
+
+      let addressName = `Device GPS Fix (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E, ±${accuracy}m)`;
+      try {
+        const geocoded = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+        if (geocoded.length > 0 && geocoded[0].formattedAddress) {
+          addressName = `${geocoded[0].formattedAddress} (±${accuracy}m)`;
+        }
+      } catch {
+        // preserve fallback addressName
+      }
+
+      handleLocationConfirmed({
+        latitude: lat,
+        longitude: lng,
+        accuracyMeters: accuracy,
+        altitudeMeters: pos.coords.altitude ?? undefined,
+        timestamp: pos.timestamp,
+        source: 'gps',
+        addressName,
+      });
       setShowPermissionModal(false);
     } catch (err: any) {
       setGpsError(err.message || 'Unable to acquire device location via Expo Location.');
@@ -125,11 +150,6 @@ export const SitingTab: React.FC<SitingTabProps> = ({
     } finally {
       setGpsLoading(false);
     }
-  };
-
-  const handleLocationButtonClick = async () => {
-    // Specifically trigger Expo Location permission request on tap of acquire device location
-    await handleAcquireExpoLocation();
   };
 
   // Roof Dimension validation & sanitization
@@ -329,7 +349,7 @@ export const SitingTab: React.FC<SitingTabProps> = ({
 
           <button
             type="button"
-            onClick={handleLocationButtonClick}
+            onClick={handleAcquireDeviceLocation}
             disabled={gpsLoading}
             className="py-2 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
           >
@@ -611,7 +631,7 @@ export const SitingTab: React.FC<SitingTabProps> = ({
         isOpen={showPermissionModal}
         onClose={() => setShowPermissionModal(false)}
         onConfirm={() => {
-          handleAcquireExpoLocation();
+          handleAcquireDeviceLocation();
         }}
         isLocating={gpsLoading}
       />

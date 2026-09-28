@@ -404,12 +404,11 @@ export const AssessmentResults: React.FC<AssessmentResultsProps> = ({
                           fontSize: '12px',
                           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
                         }}
-                        formatter={(value: any, name: any) => {
-                          const nameStr = String(name || '');
-                          if (nameStr === 'acPowerKw') return [`${value} kW AC`, 'Expected AC Power'];
-                          if (nameStr === 'poaIrradianceWm2') return [`${value} W/m²`, 'POA Irradiance'];
-                          if (nameStr === 'cellTemperatureC') return [`${value} °C`, 'Cell Temp'];
-                          return [value, nameStr];
+                        formatter={(value: any, name: string) => {
+                          if (name === 'acPowerKw') return [`${value} kW AC`, 'Expected AC Power'];
+                          if (name === 'poaIrradianceWm2') return [`${value} W/m²`, 'POA Irradiance'];
+                          if (name === 'cellTemperatureC') return [`${value} °C`, 'Cell Temp'];
+                          return [value, name];
                         }}
                         labelFormatter={(label) => `Hour: ${label}`}
                       />

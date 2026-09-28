@@ -1,5 +1,5 @@
 {
-  "name": "Solaris",
+  "name": "Solaris - Solar Potential & Siting",
   "description": "Advanced solar PV potential, rooftop siting, irradiance simulation, and financial ROI calculator for Dumaguete and Negros Oriental.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
