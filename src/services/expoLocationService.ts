@@ -177,6 +177,27 @@ class ExpoLocationService {
   }
 
   /**
+   * Check whether location services are enabled on the device (GPS toggle)
+   */
+  async hasServicesEnabledAsync(): Promise<boolean> {
+    const nativeExpo = (window as any).ExpoLocation || (window as any).expo?.location;
+    if (nativeExpo && typeof nativeExpo.hasServicesEnabledAsync === 'function') {
+      return await nativeExpo.hasServicesEnabledAsync();
+    }
+    return 'geolocation' in navigator;
+  }
+
+  /**
+   * Prompt the user to enable location services on their device (Android Google Play Services prompt)
+   */
+  async enableNetworkProviderAsync(): Promise<void> {
+    const nativeExpo = (window as any).ExpoLocation || (window as any).expo?.location;
+    if (nativeExpo && typeof nativeExpo.enableNetworkProviderAsync === 'function') {
+      return await nativeExpo.enableNetworkProviderAsync();
+    }
+  }
+
+  /**
    * Acquire current device position matching Expo Location specs
    */
   async getCurrentPositionAsync(options: LocationOptions = {}): Promise<LocationObject> {
@@ -357,6 +378,8 @@ export const Location = {
   requestForegroundPermissionsAsync: () => expoLocationService.requestForegroundPermissionsAsync(),
   getForegroundPermissionsAsync: () => expoLocationService.getForegroundPermissionsAsync(),
   getCurrentPositionAsync: (options?: LocationOptions) => expoLocationService.getCurrentPositionAsync(options),
+  hasServicesEnabledAsync: () => expoLocationService.hasServicesEnabledAsync(),
+  enableNetworkProviderAsync: () => expoLocationService.enableNetworkProviderAsync(),
   reverseGeocodeAsync: (coords: { latitude: number; longitude: number }) => expoLocationService.reverseGeocodeAsync(coords),
   Accuracy: LocationAccuracy,
 };

@@ -245,11 +245,17 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
     setGpsError(null);
 
     try {
-      // Specifically call Location.requestForegroundPermissionAsync() when user taps
+      // 1. Check if device-level location services are active (GPS toggle)
+      const servicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!servicesEnabled) {
+        await Location.enableNetworkProviderAsync();
+      }
+
+      // 2. Specifically call Location.requestForegroundPermissionAsync() when user taps
       const permission = await Location.requestForegroundPermissionAsync();
 
       if (!permission.granted && permission.status !== 'granted') {
-        setGpsError('Location permission was denied. Please allow location access in your device settings.');
+        setGpsError('Location permission was denied. Please allow location access in your device settings or browser permissions.');
         setShowPermissionModal(false);
         return;
       }
