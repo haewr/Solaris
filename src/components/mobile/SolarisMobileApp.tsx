@@ -21,6 +21,17 @@ import {
   PHILIPPINES_TURNKEY_COST_PER_KWP_PHP,
 } from '../../services/simulationService';
 
+const DEFAULT_ROOF: RoofDimensions = {
+  mode: 'dimensions',
+  widthMeters: 0,
+  lengthMeters: 0,
+  totalAreaM2: 0,
+  usableAreaM2: 0,
+  tiltDegrees: 12, // Standard optimal tilt indicator for Dumaguete (9.3° N)
+  azimuthDegrees: 180, // True South
+  orientationName: 'South (180° Optimal)',
+};
+
 const DEFAULT_SIMULATION_INPUTS: SimulationUserInputs = {
   systemSizeKwp: 0,
   tariffPhp: 0,
@@ -32,38 +43,123 @@ const DEFAULT_SIMULATION_INPUTS: SimulationUserInputs = {
 };
 
 export const SolarisMobileApp: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<TabDestination>('siting');
-
-  // Location State: Initially unpinned (null) so users can comfortably choose their own pinpoint location
-  const [location, setLocation] = useState<LocationCoordinates | null>(null);
-
-  // Roof Geometry State: Initially empty (0) dimensions so users enter their custom measurements
-  const [roof, setRoof] = useState<RoofDimensions>({
-    mode: 'dimensions',
-    widthMeters: 0,
-    lengthMeters: 0,
-    totalAreaM2: 0,
-    usableAreaM2: 0,
-    tiltDegrees: 12, // Standard optimal tilt indicator for Dumaguete (9.3° N)
-    azimuthDegrees: 180, // True South
-    orientationName: 'South (180° Optimal)',
+  // Active Tab: Restores last viewed tab or starts on 'siting'
+  const [currentTab, setCurrentTab] = useState<TabDestination>(() => {
+    try {
+      const saved = localStorage.getItem('solaris_current_tab');
+      if (saved && ['siting', 'simulation', 'live', 'settings'].includes(saved)) {
+        return saved as TabDestination;
+      }
+    } catch (e) {}
+    return 'siting';
   });
 
-  // NASA POWER Climatology Data (Real Satellite Irradiance)
-  const [nasaData, setNasaData] = useState<NasaPowerClimatologyData | null>(null);
+  useEffect(() => {
+    try {
+      localStorage.setItem('solaris_current_tab', currentTab);
+    } catch (e) {}
+  }, [currentTab]);
+
+  // Location State: Starts unpinned (null) on first launch; restores last pinned location after that
+  const [location, setLocation] = useState<LocationCoordinates | null>(() => {
+    try {
+      const saved = localStorage.getItem('solaris_location');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.latitude === 'number' && typeof parsed.longitude === 'number') {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
+
+  useEffect(() => {
+    try {
+      if (location) {
+        localStorage.setItem('solaris_location', JSON.stringify(location));
+      } else {
+        localStorage.removeItem('solaris_location');
+      }
+    } catch (e) {}
+  }, [location]);
+
+  // Roof Geometry State: Starts at 0 dimensions on first launch; restores last user-entered dimensions after that
+  const [roof, setRoof] = useState<RoofDimensions>(() => {
+    try {
+      const saved = localStorage.getItem('solaris_roof');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            ...DEFAULT_ROOF,
+            ...parsed,
+          };
+        }
+      }
+    } catch (e) {}
+    return DEFAULT_ROOF;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('solaris_roof', JSON.stringify(roof));
+    } catch (e) {}
+  }, [roof]);
+
+  // NASA POWER Climatology Data: Restores previously fetched climatology so offline re-opens stay populated
+  const [nasaData, setNasaData] = useState<NasaPowerClimatologyData | null>(() => {
+    try {
+      const saved = localStorage.getItem('solaris_nasa_data');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.annualDailyKwhM2 === 'number') {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
+
+  useEffect(() => {
+    try {
+      if (nasaData) {
+        localStorage.setItem('solaris_nasa_data', JSON.stringify(nasaData));
+      } else {
+        localStorage.removeItem('solaris_nasa_data');
+      }
+    } catch (e) {}
+  }, [nasaData]);
 
   // App Settings & Local Security
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [isLocked, setIsLocked] = useState(false);
-  const [recommendedKwp, setRecommendedKwp] = useState<number>(0);
 
-  // Simulation Inputs State: Starts initially empty, persists user edits across tab switches
+  // Recommended kWp: Restores last recommended capacity
+  const [recommendedKwp, setRecommendedKwp] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('solaris_recommended_kwp');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+      }
+    } catch (e) {}
+    return 0;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('solaris_recommended_kwp', recommendedKwp.toString());
+    } catch (e) {}
+  }, [recommendedKwp]);
+
+  // Simulation Inputs State: Starts initially empty on first launch; preserves all user inputs when reopening
   const [simulationInputs, setSimulationInputs] = useState<SimulationUserInputs>(() => {
     try {
       const saved = localStorage.getItem('solaris_simulation_inputs');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.hasUserCustomized) {
+        if (parsed && typeof parsed === 'object') {
           return {
             systemSizeKwp: typeof parsed.systemSizeKwp === 'number' ? parsed.systemSizeKwp : 0,
             tariffPhp: typeof parsed.tariffPhp === 'number' ? parsed.tariffPhp : 0,
@@ -75,9 +171,7 @@ export const SolarisMobileApp: React.FC = () => {
           };
         }
       }
-    } catch (e) {
-      // fallback to default
-    }
+    } catch (e) {}
     return DEFAULT_SIMULATION_INPUTS;
   });
 
@@ -116,26 +210,20 @@ export const SolarisMobileApp: React.FC = () => {
   const handleResetAllData = () => {
     // Reset to initial clean, unpinned state
     setLocation(null);
-    setRoof({
-      mode: 'dimensions',
-      widthMeters: 0,
-      lengthMeters: 0,
-      totalAreaM2: 0,
-      usableAreaM2: 0,
-      tiltDegrees: 12,
-      azimuthDegrees: 180,
-      orientationName: 'South (180° Optimal)',
-    });
+    setRoof(DEFAULT_ROOF);
     setNasaData(null);
     setRecommendedKwp(0);
     setSettings(DEFAULT_APP_SETTINGS);
     setIsLocked(false);
     setSimulationInputs(DEFAULT_SIMULATION_INPUTS);
     try {
+      localStorage.removeItem('solaris_location');
+      localStorage.removeItem('solaris_roof');
+      localStorage.removeItem('solaris_nasa_data');
+      localStorage.removeItem('solaris_recommended_kwp');
       localStorage.removeItem('solaris_simulation_inputs');
-    } catch (e) {
-      // ignore
-    }
+      localStorage.removeItem('solaris_current_tab');
+    } catch (e) {}
     setCurrentTab('siting');
   };
 

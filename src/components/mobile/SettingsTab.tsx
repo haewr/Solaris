@@ -40,8 +40,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   const loadSettingsAndDegradation = async () => {
     const profile = await degradationService.getProfile();
     setDegProfile(profile);
-    // Keep initially empty unless user explicitly set a profile date
-    setInstallDate('');
+    const hasCustom = await degradationService.hasCustomProfile();
+    if (hasCustom && profile.installationDate) {
+      setInstallDate(profile.installationDate);
+    } else {
+      setInstallDate('');
+    }
     setDegRate(profile.annualDegradationRatePercent);
   };
 

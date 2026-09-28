@@ -15,6 +15,14 @@ export const NREL_LITERATURE_CITATION =
 
 export class DegradationService {
   /**
+   * Checks whether the user has explicitly saved a custom degradation profile.
+   */
+  async hasCustomProfile(): Promise<boolean> {
+    const cached = await encryptedStorage.getItem<DegradationProfile>(DEGRADATION_STORAGE_KEY);
+    return Boolean(cached && cached.data);
+  }
+
+  /**
    * Retrieves the saved degradation profile from encrypted storage,
    * or returns a default profile initialized to current year.
    */
