@@ -30,6 +30,7 @@ import {
 import { nasaPowerService, DUMAGUETE_DEFAULT_COORDS } from '../../services/nasaPowerService';
 import { MapPinpointSheet } from './MapPinpointSheet';
 import { SitingMiniMap } from './SitingMiniMap';
+import { LocationPermissionModal } from './LocationPermissionModal';
 
 interface SitingTabProps {
   location: LocationCoordinates | null;
@@ -57,6 +58,7 @@ export const SitingTab: React.FC<SitingTabProps> = ({
   const [isFromCache, setIsFromCache] = useState(false);
   const [cacheTimestamp, setCacheTimestamp] = useState<number | undefined>();
   const [showPinpointSheet, setShowPinpointSheet] = useState(false);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
 
@@ -339,12 +341,13 @@ export const SitingTab: React.FC<SitingTabProps> = ({
           </button>
 
           <button
-            onClick={handleAcquireGps}
+            type="button"
+            onClick={() => setShowPermissionModal(true)}
             disabled={gpsLoading}
             className="py-2 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
           >
             <Navigation className={`w-3.5 h-3.5 text-indigo-600 ${gpsLoading ? 'animate-spin' : ''}`} />
-            <span>{gpsLoading ? 'Acquiring...' : 'Device GPS'}</span>
+            <span>{gpsLoading ? 'Acquiring...' : 'Acquire Device Location'}</span>
           </button>
         </div>
 
@@ -615,6 +618,17 @@ export const SitingTab: React.FC<SitingTabProps> = ({
           onClose={() => setShowPinpointSheet(false)}
         />
       )}
+
+      {/* Permission Request Dialog */}
+      <LocationPermissionModal
+        isOpen={showPermissionModal}
+        onClose={() => setShowPermissionModal(false)}
+        onConfirm={() => {
+          setShowPermissionModal(false);
+          handleAcquireGps();
+        }}
+        isLocating={gpsLoading}
+      />
     </div>
   );
 };

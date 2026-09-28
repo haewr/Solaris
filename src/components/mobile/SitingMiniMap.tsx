@@ -143,11 +143,11 @@ export const SitingMiniMap: React.FC<SitingMiniMapProps> = ({
     }
 
     if (tileMode === 'satellite') {
-      const satLayer = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        { maxZoom: 19, maxNativeZoom: 18, attribution: 'Esri Satellite' }
+      const hybridLayer = L.tileLayer(
+        'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+        { maxZoom: 19, attribution: 'Google Satellite Hybrid' }
       ).addTo(map);
-      activeTileRef.current = satLayer;
+      activeTileRef.current = hybridLayer;
     } else {
       const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
@@ -174,20 +174,6 @@ export const SitingMiniMap: React.FC<SitingMiniMapProps> = ({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            setTileMode('streets');
-          }}
-          className={`px-2 py-0.5 rounded-lg transition-all ${
-            tileMode === 'streets'
-              ? 'bg-indigo-600 text-white shadow-2xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Street
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
             setTileMode('satellite');
           }}
           className={`px-2 py-0.5 rounded-lg transition-all ${
@@ -196,7 +182,21 @@ export const SitingMiniMap: React.FC<SitingMiniMapProps> = ({
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          Satellite
+          Hybrid
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setTileMode('streets');
+          }}
+          className={`px-2 py-0.5 rounded-lg transition-all ${
+            tileMode === 'streets'
+              ? 'bg-indigo-600 text-white shadow-2xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Street Map
         </button>
       </div>
 

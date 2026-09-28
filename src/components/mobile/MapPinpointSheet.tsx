@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { LocationCoordinates } from '../../types/nativeSolaris';
 import { DUMAGUETE_DEFAULT_COORDS } from '../../services/nasaPowerService';
+import { LocationPermissionModal } from './LocationPermissionModal';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -53,11 +54,13 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [currentZoom, setCurrentZoom] = useState(15);
   const [showCloudInfo, setShowCloudInfo] = useState(false);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
-  const [mapLayerType, setMapLayerType] = useState<'streets' | 'satellite' | 'hybrid'>('satellite');
+  // Default to 'hybrid' (Google Satellite Hybrid), with 'streets' (Street Map) as the other choice
+  const [mapLayerType, setMapLayerType] = useState<'hybrid' | 'streets'>('hybrid');
   const activeTileLayerRef = useRef<L.TileLayer | null>(null);
 
   const createPinIcon = () => {
@@ -93,15 +96,15 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
 
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    const satLayer = L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    // Initial layer: Google Satellite Hybrid
+    const hybridLayer = L.tileLayer(
+      'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
       {
-        attribution: 'Esri World Imagery',
+        attribution: 'Google Satellite Hybrid',
         maxZoom: 19,
-        maxNativeZoom: 18,
       }
     ).addTo(map);
-    activeTileLayerRef.current = satLayer;
+    activeTileLayerRef.current = hybridLayer;
 
     // Only add marker if coordinates already exist
     if (selectedCoords) {
@@ -179,7 +182,7 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
     };
   }, []);
 
-  // Handle layer switch between streets, satellite, and hybrid
+  // Handle layer switch between Hybrid and Street Map
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -188,17 +191,7 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
       map.removeLayer(activeTileLayerRef.current);
     }
 
-    if (mapLayerType === 'satellite') {
-      const satLayer = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        {
-          maxZoom: 19,
-          maxNativeZoom: 18,
-          attribution: 'Esri Satellite Imagery',
-        }
-      ).addTo(map);
-      activeTileLayerRef.current = satLayer;
-    } else if (mapLayerType === 'hybrid') {
+    if (mapLayerType === 'hybrid') {
       const hybridLayer = L.tileLayer(
         'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
         {
@@ -245,10 +238,11 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
     }
   };
 
-  // Robust GPS location handler
+  // Robust GPS location handler (executed after user grants permission)
   const handleAcquireGps = () => {
     if (!navigator.geolocation) {
       setGpsError('Geolocation is not supported by your browser or device.');
+      setShowPermissionModal(false);
       return;
     }
 
@@ -257,6 +251,7 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
 
     const onPosSuccess = (pos: GeolocationPosition) => {
       setIsGpsLocating(false);
+      setShowPermissionModal(false);
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       const accuracy = Math.round(pos.coords.accuracy);
@@ -272,6 +267,7 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
             onPosSuccess,
             (fallbackErr) => {
               setIsGpsLocating(false);
+              setShowPermissionModal(false);
               setGpsError(
                 `GPS signal timeout (${fallbackErr.message}). You can select your Dumaguete barangay or tap the roof on the map.`
               );
@@ -280,7 +276,8 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
           );
         } else {
           setIsGpsLocating(false);
-          setGpsError(`GPS Access: ${err.message}. Please use the map or quick barangay select.`);
+          setShowPermissionModal(false);
+          setGpsError(`GPS Access: ${err.message}. Please allow location access in your browser or tap the map.`);
         }
       },
       { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
@@ -300,179 +297,179 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-white text-slate-900 rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 animate-in slide-in-from-bottom-6">
-        {/* Header */}
-        <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-md rounded-t-3xl z-10">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <MapPin className="w-4 h-4" />
+    <>
+      <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="bg-white text-slate-900 rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 animate-in slide-in-from-bottom-6">
+          {/* Header */}
+          <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-md rounded-t-3xl z-10">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                <MapPin className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Pinpoint Solar Site</h3>
+                <p className="text-[11px] text-slate-500 font-medium">Dumaguete City, Negros Oriental</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">Pinpoint Solar Site</h3>
-              <p className="text-[11px] text-slate-500 font-medium">Dumaguete City, Negros Oriental</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-11 h-11 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 active:scale-95 transition-all"
-            aria-label="Close pinpoint sheet"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Scrollable Container */}
-        <div className="p-4 space-y-3.5 overflow-y-auto">
-          {/* Real GPS Action Bar */}
-          <div className="flex items-center gap-2">
             <button
-              onClick={handleAcquireGps}
-              disabled={isGpsLocating}
-              className="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-all disabled:opacity-60"
+              onClick={onClose}
+              className="w-11 h-11 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 active:scale-95 transition-all"
+              aria-label="Close pinpoint sheet"
             >
-              <Navigation className={`w-3.5 h-3.5 ${isGpsLocating ? 'animate-spin' : ''}`} />
-              <span>{isGpsLocating ? 'Acquiring GPS / Network Fix...' : 'Acquire Device Location'}</span>
+              <X className="w-5 h-5" />
             </button>
           </div>
 
-          {gpsError && (
-            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 font-medium">
-              {gpsError}
+          {/* Scrollable Container */}
+          <div className="p-4 space-y-3.5 overflow-y-auto">
+            {/* Real GPS Action Bar */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPermissionModal(true)}
+                disabled={isGpsLocating}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-all disabled:opacity-60"
+              >
+                <Navigation className={`w-3.5 h-3.5 ${isGpsLocating ? 'animate-spin' : ''}`} />
+                <span>{isGpsLocating ? 'Acquiring GPS / Network Fix...' : 'Acquire Device Location'}</span>
+              </button>
             </div>
-          )}
 
-          {/* Quick Select Dumaguete Barangays */}
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-              Quick Select Dumaguete Barangay:
-            </span>
-            <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-              {DUMAGUETE_BARANGAYS.map((b) => (
+            {gpsError && (
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 font-medium">
+                {gpsError}
+              </div>
+            )}
+
+            {/* Quick Select Dumaguete Barangays */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                Quick Select Dumaguete Barangay:
+              </span>
+              <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                {DUMAGUETE_BARANGAYS.map((b) => (
+                  <button
+                    key={b.name}
+                    onClick={() => updateMapPosition(b.lat, b.lng, b.name)}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all border ${
+                      selectedCoords &&
+                      Math.abs(selectedCoords.lat - b.lat) < 0.001 &&
+                      Math.abs(selectedCoords.lng - b.lng) < 0.001
+                        ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-bold'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {b.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Map Layer Switcher - Hybrid & Street Map only */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
                 <button
-                  key={b.name}
-                  onClick={() => updateMapPosition(b.lat, b.lng, b.name)}
-                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all border ${
-                    selectedCoords &&
-                    Math.abs(selectedCoords.lat - b.lat) < 0.001 &&
-                    Math.abs(selectedCoords.lng - b.lng) < 0.001
-                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-bold'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                  type="button"
+                  onClick={() => setMapLayerType('hybrid')}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    mapLayerType === 'hybrid'
+                      ? 'bg-white text-indigo-700 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  {b.name}
+                  Hybrid
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => setMapLayerType('streets')}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    mapLayerType === 'streets'
+                      ? 'bg-white text-indigo-700 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Street Map
+                </button>
+              </div>
+
+              <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
+                <MousePointerClick className="w-3 h-3 text-indigo-600" />
+                <span>Tap roof to move pin</span>
+              </div>
             </div>
+
+            {/* Leaflet Map Canvas */}
+            <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-inner h-64 bg-slate-100">
+              <div ref={mapContainerRef} className="w-full h-full" style={{ zIndex: 1 }} />
+
+              {/* Pinpoint instructions overlay */}
+              {!selectedCoords && (
+                <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px] flex items-center justify-center pointer-events-none z-10 p-4">
+                  <div className="bg-white/95 rounded-2xl px-4 py-2 text-center shadow-lg border border-slate-200">
+                    <p className="text-xs font-bold text-slate-800">Tap anywhere on the map</p>
+                    <p className="text-[10px] text-slate-500">to place your rooftop pin</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Selected Coordinates Status Card */}
+            {selectedCoords ? (
+              <div className="p-3 rounded-2xl bg-indigo-50 border border-indigo-200 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-800">
+                    Pinned Site Coordinates
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    NASA Ready
+                  </span>
+                </div>
+                <div className="font-mono text-xs font-bold text-indigo-950">
+                  {selectedCoords.lat.toFixed(5)}°N, {selectedCoords.lng.toFixed(5)}°E
+                </div>
+                <p className="text-[10px] text-indigo-700">
+                  {addressName || 'Target Rooftop Location'}
+                </p>
+              </div>
+            ) : (
+              <div className="p-3 rounded-2xl bg-slate-100 border border-slate-200 text-center">
+                <p className="text-xs text-slate-600 font-medium">No site pinned yet</p>
+                <p className="text-[10px] text-slate-400">
+                  Use "Acquire Device Location", choose a barangay, or tap the map directly
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Map Layer Switcher */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
-              <button
-                onClick={() => setMapLayerType('satellite')}
-                className={`px-2.5 py-1 rounded-lg transition-all ${
-                  mapLayerType === 'satellite'
-                    ? 'bg-white text-indigo-600 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Esri Aerial
-              </button>
-              <button
-                onClick={() => setMapLayerType('hybrid')}
-                className={`px-2.5 py-1 rounded-lg transition-all ${
-                  mapLayerType === 'hybrid'
-                    ? 'bg-white text-indigo-600 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Hybrid
-              </button>
-              <button
-                onClick={() => setMapLayerType('streets')}
-                className={`px-2.5 py-1 rounded-lg transition-all ${
-                  mapLayerType === 'streets'
-                    ? 'bg-white text-indigo-600 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Street Map
-              </button>
-            </div>
-
+          {/* Footer Actions */}
+          <div className="p-4 border-t border-slate-200 bg-slate-50 rounded-b-3xl flex gap-2">
             <button
-              onClick={() => setShowCloudInfo(!showCloudInfo)}
-              className="text-[11px] font-bold text-slate-600 flex items-center gap-1 hover:text-indigo-600"
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors"
             >
-              <CloudSun className="w-3.5 h-3.5" />
-              <span>Tropical Sun Align</span>
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!selectedCoords}
+              className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-100 flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+            >
+              <Check className="w-4 h-4" />
+              <span>Confirm Location</span>
             </button>
           </div>
-
-          {showCloudInfo && (
-            <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-2xl text-[11px] text-indigo-900 space-y-1">
-              <span className="font-bold block">Negros Island Satellite Siting Tip</span>
-              <p className="leading-snug text-slate-600">
-                Mount Talinis southwest of Dumaguete causes afternoon cloud build-up. Orienting panels South (180°) or slightly Southeast (150°-170°) maximizes morning and noon clear-sky peak sun hours.
-              </p>
-            </div>
-          )}
-
-          {/* Leaflet Map Canvas */}
-          <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-inner h-64 bg-slate-100">
-            <div ref={mapContainerRef} className="w-full h-full cursor-crosshair z-0" />
-
-            {!selectedCoords && (
-              <div className="absolute top-2 left-2 right-12 z-10 bg-indigo-600/90 text-white backdrop-blur-sm px-3 py-1.5 rounded-xl shadow-xs text-xs font-semibold flex items-center gap-1.5 animate-pulse">
-                <MousePointerClick className="w-4 h-4 shrink-0" />
-                <span>Tap anywhere on your roof to place the pin</span>
-              </div>
-            )}
-
-            {selectedCoords && (
-              <div className="absolute top-2 left-2 z-10 bg-white/95 backdrop-blur-sm px-2.5 py-1 rounded-xl border border-slate-200 shadow-xs text-[10px] font-mono text-slate-700">
-                {selectedCoords.lat.toFixed(5)}°N, {selectedCoords.lng.toFixed(5)}°E
-              </div>
-            )}
-          </div>
-
-          {/* Current Address display */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-600 block">
-              Site Coordinate Label
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={addressName || (selectedCoords ? `Pinpoint (${selectedCoords.lat.toFixed(4)}°N, ${selectedCoords.lng.toFixed(4)}°E)` : 'No location selected yet')}
-                readOnly
-                disabled
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-semibold cursor-not-allowed"
-                placeholder="Tap map to place pin..."
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Footer actions */}
-        <div className="p-3 border-t border-slate-200 bg-slate-50 rounded-b-3xl flex gap-2">
-          <button
-            onClick={onClose}
-            className="w-1/3 py-3 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!selectedCoords}
-            className="w-2/3 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-100 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Check className="w-4 h-4" />
-            <span>{selectedCoords ? 'Apply Siting Location' : 'Tap Map to Drop Pin'}</span>
-          </button>
         </div>
       </div>
-    </div>
+
+      {/* Permission Request Dialog */}
+      <LocationPermissionModal
+        isOpen={showPermissionModal}
+        onClose={() => setShowPermissionModal(false)}
+        onConfirm={handleAcquireGps}
+        isLocating={isGpsLocating}
+      />
+    </>
   );
 };
