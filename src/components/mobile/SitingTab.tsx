@@ -28,7 +28,7 @@ import {
   SolarMathCalculation,
 } from '../../types/nativeSolaris';
 import { nasaPowerService, DUMAGUETE_DEFAULT_COORDS } from '../../services/nasaPowerService';
-import { expoLocationService, LocationAccuracy } from '../../services/expoLocationService';
+import { expoLocationService, Location, LocationAccuracy } from '../../services/expoLocationService';
 import { MapPinpointSheet } from './MapPinpointSheet';
 import { SitingMiniMap } from './SitingMiniMap';
 import { LocationPermissionModal } from './LocationPermissionModal';
@@ -105,6 +105,14 @@ export const SitingTab: React.FC<SitingTabProps> = ({
     setGpsError(null);
 
     try {
+      // Explicitly call Location.requestForegroundPermissionAsync() specifically when acquiring device location
+      const perm = await Location.requestForegroundPermissionAsync();
+      if (!perm.granted) {
+        setGpsError('Location permission was denied. Please allow location access in your device settings.');
+        setShowPermissionModal(true);
+        return;
+      }
+
       const loc = await expoLocationService.acquireSolarisLocation({
         accuracy: LocationAccuracy.High,
         timeout: 9000,
@@ -120,18 +128,8 @@ export const SitingTab: React.FC<SitingTabProps> = ({
   };
 
   const handleLocationButtonClick = async () => {
-    setGpsError(null);
-    try {
-      const perm = await expoLocationService.getForegroundPermissionsAsync();
-      if (perm.granted) {
-        // Already authorized - acquire directly via Expo Location
-        handleAcquireExpoLocation();
-        return;
-      }
-    } catch {
-      // Prompt modal
-    }
-    setShowPermissionModal(true);
+    // Specifically trigger Expo Location permission request on tap of acquire device location
+    await handleAcquireExpoLocation();
   };
 
   // Roof Dimension validation & sanitization

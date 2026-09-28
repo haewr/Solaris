@@ -70,12 +70,25 @@ export interface LocationGeocodedAddress {
 class ExpoLocationService {
   /**
    * Request permission for foreground location access
+   * Specifically called when user taps "Acquire Device Location"
+   */
+  async requestForegroundPermissionAsync(): Promise<LocationPermissionResponse> {
+    return this.requestForegroundPermissionsAsync();
+  }
+
+  /**
+   * Request permission for foreground location access (standard Expo plural naming)
    */
   async requestForegroundPermissionsAsync(): Promise<LocationPermissionResponse> {
     // If native Expo Location bridge is available in window / React Native
-    const nativeExpo = (window as any).ExpoLocation || (window as any).expo?.location;
-    if (nativeExpo && typeof nativeExpo.requestForegroundPermissionsAsync === 'function') {
-      return await nativeExpo.requestForegroundPermissionsAsync();
+    const nativeExpo = (window as any).ExpoLocation || (window as any).expo?.location || (window as any).Location;
+    if (nativeExpo) {
+      if (typeof nativeExpo.requestForegroundPermissionAsync === 'function') {
+        return await nativeExpo.requestForegroundPermissionAsync();
+      }
+      if (typeof nativeExpo.requestForegroundPermissionsAsync === 'function') {
+        return await nativeExpo.requestForegroundPermissionsAsync();
+      }
     }
 
     if (!('geolocation' in navigator)) {
@@ -102,7 +115,7 @@ class ExpoLocationService {
       }
     }
 
-    // Attempt a light ping to trigger browser permission prompt
+    // Directly trigger browser geolocation prompt on user interaction
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
         () => {
@@ -138,12 +151,24 @@ class ExpoLocationService {
   }
 
   /**
+   * Check existing permission status (singular alias)
+   */
+  async getForegroundPermissionAsync(): Promise<LocationPermissionResponse> {
+    return this.getForegroundPermissionsAsync();
+  }
+
+  /**
    * Check existing permission status
    */
   async getForegroundPermissionsAsync(): Promise<LocationPermissionResponse> {
-    const nativeExpo = (window as any).ExpoLocation || (window as any).expo?.location;
-    if (nativeExpo && typeof nativeExpo.getForegroundPermissionsAsync === 'function') {
-      return await nativeExpo.getForegroundPermissionsAsync();
+    const nativeExpo = (window as any).ExpoLocation || (window as any).expo?.location || (window as any).Location;
+    if (nativeExpo) {
+      if (typeof nativeExpo.getForegroundPermissionAsync === 'function') {
+        return await nativeExpo.getForegroundPermissionAsync();
+      }
+      if (typeof nativeExpo.getForegroundPermissionsAsync === 'function') {
+        return await nativeExpo.getForegroundPermissionsAsync();
+      }
     }
 
     if (!('geolocation' in navigator)) {
@@ -337,3 +362,21 @@ class ExpoLocationService {
 }
 
 export const expoLocationService = new ExpoLocationService();
+
+/**
+ * Standard Expo Location namespace export matching `import * as Location from 'expo-location'`
+ */
+export const Location = {
+  requestForegroundPermissionAsync: () => expoLocationService.requestForegroundPermissionAsync(),
+  requestForegroundPermissionsAsync: () => expoLocationService.requestForegroundPermissionsAsync(),
+  getForegroundPermissionAsync: () => expoLocationService.getForegroundPermissionAsync(),
+  getForegroundPermissionsAsync: () => expoLocationService.getForegroundPermissionsAsync(),
+  getCurrentPositionAsync: (options?: LocationOptions) => expoLocationService.getCurrentPositionAsync(options),
+  reverseGeocodeAsync: (coords: { latitude: number; longitude: number }) => expoLocationService.reverseGeocodeAsync(coords),
+  Accuracy: LocationAccuracy,
+};
+
+if (typeof window !== 'undefined') {
+  (window as any).Location = Location;
+  (window as any).ExpoLocation = Location;
+}

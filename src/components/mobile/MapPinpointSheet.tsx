@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { LocationCoordinates } from '../../types/nativeSolaris';
 import { DUMAGUETE_DEFAULT_COORDS } from '../../services/nasaPowerService';
-import { expoLocationService, LocationAccuracy } from '../../services/expoLocationService';
+import { expoLocationService, Location, LocationAccuracy } from '../../services/expoLocationService';
 import { LocationPermissionModal } from './LocationPermissionModal';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -245,6 +245,14 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
     setGpsError(null);
 
     try {
+      // Explicitly call Location.requestForegroundPermissionAsync() specifically on acquire tap
+      const perm = await Location.requestForegroundPermissionAsync();
+      if (!perm.granted) {
+        setGpsError('Location permission was denied. Please allow location access in your device settings.');
+        setShowPermissionModal(true);
+        return;
+      }
+
       const loc = await expoLocationService.acquireSolarisLocation({
         accuracy: LocationAccuracy.High,
         timeout: 9000,
@@ -253,24 +261,14 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
       setShowPermissionModal(false);
     } catch (err: any) {
       setGpsError(err.message || 'Unable to acquire device location via Expo Location.');
-      setShowPermissionModal(false);
     } finally {
       setIsGpsLocating(false);
     }
   };
 
   const handleLocationButtonClick = async () => {
-    setGpsError(null);
-    try {
-      const perm = await expoLocationService.getForegroundPermissionsAsync();
-      if (perm.granted) {
-        handleAcquireGps();
-        return;
-      }
-    } catch {
-      // prompt modal
-    }
-    setShowPermissionModal(true);
+    // Specifically trigger Expo Location permission request on tap of acquire device location
+    await handleAcquireGps();
   };
 
   const handleSave = () => {
@@ -320,7 +318,7 @@ export const MapPinpointSheet: React.FC<MapPinpointSheetProps> = ({
                 className="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-all disabled:opacity-60"
               >
                 <Navigation className={`w-3.5 h-3.5 ${isGpsLocating ? 'animate-spin' : ''}`} />
-                <span>{isGpsLocating ? 'Acquiring Device Location...' : 'Use Device Location (Expo)'}</span>
+                <span>{isGpsLocating ? 'Acquiring Device Location...' : 'Acquire Device Location'}</span>
               </button>
             </div>
 
