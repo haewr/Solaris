@@ -28,6 +28,7 @@ import {
   SolarMathCalculation,
 } from '../../types/nativeSolaris';
 import { nasaPowerService, DUMAGUETE_DEFAULT_COORDS } from '../../services/nasaPowerService';
+import { expoLocationService, LocationAccuracy } from '../../services/expoLocationService';
 import { MapPinpointSheet } from './MapPinpointSheet';
 import { SitingMiniMap } from './SitingMiniMap';
 import { LocationPermissionModal } from './LocationPermissionModal';
@@ -98,51 +99,39 @@ export const SitingTab: React.FC<SitingTabProps> = ({
     onChangeLocation(newLoc);
   };
 
-  // Robust GPS location acquisition
-  const handleAcquireGps = () => {
-    if (!navigator.geolocation) {
-      setGpsError('Geolocation is not supported on this device.');
-      return;
-    }
-
+  // Expo Location acquisition
+  const handleAcquireExpoLocation = async () => {
     setGpsLoading(true);
     setGpsError(null);
 
-    const onPosSuccess = (pos: GeolocationPosition) => {
-      setGpsLoading(false);
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      const accuracy = Math.round(pos.coords.accuracy);
-      handleLocationConfirmed({
-        latitude: lat,
-        longitude: lng,
-        accuracyMeters: accuracy,
-        altitudeMeters: pos.coords.altitude || undefined,
-        timestamp: Date.now(),
-        source: 'gps',
-        addressName: `GPS Device Fix (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E, ±${accuracy}m)`,
+    try {
+      const loc = await expoLocationService.acquireSolarisLocation({
+        accuracy: LocationAccuracy.High,
+        timeout: 9000,
       });
-    };
+      handleLocationConfirmed(loc);
+      setShowPermissionModal(false);
+    } catch (err: any) {
+      setGpsError(err.message || 'Unable to acquire device location via Expo Location.');
+      setShowPermissionModal(false);
+    } finally {
+      setGpsLoading(false);
+    }
+  };
 
-    navigator.geolocation.getCurrentPosition(
-      onPosSuccess,
-      (err) => {
-        if (err.code === 3 || err.code === 2) {
-          navigator.geolocation.getCurrentPosition(
-            onPosSuccess,
-            (fallbackErr) => {
-              setGpsLoading(false);
-              setGpsError(`Device location fix timed out (${fallbackErr.message}). You can tap the map to place your pin.`);
-            },
-            { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
-          );
-        } else {
-          setGpsLoading(false);
-          setGpsError(`GPS Access: ${err.message}. Please tap the map or use Pinpoint Location.`);
-        }
-      },
-      { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
-    );
+  const handleLocationButtonClick = async () => {
+    setGpsError(null);
+    try {
+      const perm = await expoLocationService.getForegroundPermissionsAsync();
+      if (perm.granted) {
+        // Already authorized - acquire directly via Expo Location
+        handleAcquireExpoLocation();
+        return;
+      }
+    } catch {
+      // Prompt modal
+    }
+    setShowPermissionModal(true);
   };
 
   // Roof Dimension validation & sanitization
@@ -342,7 +331,7 @@ export const SitingTab: React.FC<SitingTabProps> = ({
 
           <button
             type="button"
-            onClick={() => setShowPermissionModal(true)}
+            onClick={handleLocationButtonClick}
             disabled={gpsLoading}
             className="py-2 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
           >
@@ -624,8 +613,7 @@ export const SitingTab: React.FC<SitingTabProps> = ({
         isOpen={showPermissionModal}
         onClose={() => setShowPermissionModal(false)}
         onConfirm={() => {
-          setShowPermissionModal(false);
-          handleAcquireGps();
+          handleAcquireExpoLocation();
         }}
         isLocating={gpsLoading}
       />

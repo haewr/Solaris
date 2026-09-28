@@ -34,11 +34,16 @@ export const LocationPermissionModal: React.FC<LocationPermissionModalProps> = (
             <Navigation className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-900 leading-tight">
-              Allow Location Access?
-            </h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-base font-bold text-slate-900 leading-tight">
+                Allow Location Access?
+              </h3>
+              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-indigo-100 text-indigo-700">
+                Expo Location
+              </span>
+            </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Solaris requires your location for solar analysis
+              Solaris calls Expo Location to pinpoint your exact rooftop
             </p>
           </div>
         </div>
