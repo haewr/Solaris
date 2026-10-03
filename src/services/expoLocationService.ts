@@ -1,5 +1,3 @@
-import { Capacitor } from '@capacitor/core';
-import { Geolocation } from '@capacitor/geolocation';
 import { LocationCoordinates } from '../types/nativeSolaris';
 import { DUMAGUETE_DEFAULT_COORDS } from './nasaPowerService';
 
@@ -55,7 +53,25 @@ export interface LocationGeocodedAddress {
   formattedAddress?: string;
 }
 
-const isNativePlatform = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
+// Safely access Capacitor and its Geolocation plugin without breaking web Vite/Rollup builds
+const isNativePlatform = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return Boolean((window as any).Capacitor?.isNativePlatform?.());
+};
+
+const getCapacitorGeolocation = async () => {
+  if (typeof window === 'undefined') return null;
+  const winCap = (window as any).Capacitor;
+  if (winCap?.Plugins?.Geolocation) {
+    return winCap.Plugins.Geolocation;
+  }
+  try {
+    const mod = await import(/* @vite-ignore */ '@capacitor/geolocation');
+    return mod?.Geolocation || null;
+  } catch {
+    return null;
+  }
+};
 
 class ExpoLocationService {
   /**
@@ -67,17 +83,20 @@ class ExpoLocationService {
 
   async requestForegroundPermissionsAsync(): Promise<LocationPermissionResponse> {
     // 1. Native Capacitor platform (Android / iOS APK)
-    if (isNativePlatform) {
+    if (isNativePlatform()) {
       try {
-        const result = await Geolocation.requestPermissions();
-        const granted =
-          result.location === 'granted' || (result as any).coarseLocation === 'granted';
-        return {
-          status: granted ? 'granted' : 'denied',
-          granted,
-          canAskAgain: !granted,
-          expires: 'never',
-        };
+        const Geolocation = await getCapacitorGeolocation();
+        if (Geolocation && typeof Geolocation.requestPermissions === 'function') {
+          const result = await Geolocation.requestPermissions();
+          const granted =
+            result.location === 'granted' || (result as any).coarseLocation === 'granted';
+          return {
+            status: granted ? 'granted' : 'denied',
+            granted,
+            canAskAgain: !granted,
+            expires: 'never',
+          };
+        }
       } catch (err) {
         console.warn('Capacitor Geolocation permission request failed:', err);
       }
@@ -126,17 +145,20 @@ class ExpoLocationService {
    * Check existing permission status (standard plural method)
    */
   async getForegroundPermissionsAsync(): Promise<LocationPermissionResponse> {
-    if (isNativePlatform) {
+    if (isNativePlatform()) {
       try {
-        const result = await Geolocation.checkPermissions();
-        const granted =
-          result.location === 'granted' || (result as any).coarseLocation === 'granted';
-        return {
-          status: granted ? 'granted' : result.location === 'denied' ? 'denied' : 'undetermined',
-          granted,
-          canAskAgain: result.location !== 'denied',
-          expires: 'never',
-        };
+        const Geolocation = await getCapacitorGeolocation();
+        if (Geolocation && typeof Geolocation.checkPermissions === 'function') {
+          const result = await Geolocation.checkPermissions();
+          const granted =
+            result.location === 'granted' || (result as any).coarseLocation === 'granted';
+          return {
+            status: granted ? 'granted' : result.location === 'denied' ? 'denied' : 'undetermined',
+            granted,
+            canAskAgain: result.location !== 'denied',
+            expires: 'never',
+          };
+        }
       } catch {
         // fall through
       }
@@ -168,10 +190,13 @@ class ExpoLocationService {
    * Check whether location services are enabled on the device (GPS toggle)
    */
   async hasServicesEnabledAsync(): Promise<boolean> {
-    if (isNativePlatform) {
+    if (isNativePlatform()) {
       try {
-        const result = await Geolocation.checkPermissions();
-        return result.location === 'granted' || (result as any).coarseLocation === 'granted';
+        const Geolocation = await getCapacitorGeolocation();
+        if (Geolocation && typeof Geolocation.checkPermissions === 'function') {
+          const result = await Geolocation.checkPermissions();
+          return result.location === 'granted' || (result as any).coarseLocation === 'granted';
+        }
       } catch {
         return true;
       }
@@ -188,10 +213,13 @@ class ExpoLocationService {
    * Prompt the user to enable location services on their device (Android Google Play Services prompt)
    */
   async enableNetworkProviderAsync(): Promise<void> {
-    if (isNativePlatform) {
+    if (isNativePlatform()) {
       try {
-        await Geolocation.requestPermissions();
-        return;
+        const Geolocation = await getCapacitorGeolocation();
+        if (Geolocation && typeof Geolocation.requestPermissions === 'function') {
+          await Geolocation.requestPermissions();
+          return;
+        }
       } catch {
         // continue
       }
@@ -214,25 +242,28 @@ class ExpoLocationService {
    */
   async getCurrentPositionAsync(options: LocationOptions = {}): Promise<LocationObject> {
     // 1. Native Capacitor platform
-    if (isNativePlatform) {
+    if (isNativePlatform()) {
       try {
-        const pos = await Geolocation.getCurrentPosition({
-          enableHighAccuracy: true,
-          timeout: options.timeout ?? 12000,
-          maximumAge: options.maximumAge ?? 30000,
-        });
-        return {
-          coords: {
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            altitude: pos.coords.altitude ?? null,
-            accuracy: pos.coords.accuracy ?? null,
-            altitudeAccuracy: pos.coords.altitudeAccuracy ?? null,
-            heading: pos.coords.heading ?? null,
-            speed: pos.coords.speed ?? null,
-          },
-          timestamp: pos.timestamp ?? Date.now(),
-        };
+        const Geolocation = await getCapacitorGeolocation();
+        if (Geolocation && typeof Geolocation.getCurrentPosition === 'function') {
+          const pos = await Geolocation.getCurrentPosition({
+            enableHighAccuracy: true,
+            timeout: options.timeout ?? 12000,
+            maximumAge: options.maximumAge ?? 30000,
+          });
+          return {
+            coords: {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              altitude: pos.coords.altitude ?? null,
+              accuracy: pos.coords.accuracy ?? null,
+              altitudeAccuracy: pos.coords.altitudeAccuracy ?? null,
+              heading: pos.coords.heading ?? null,
+              speed: pos.coords.speed ?? null,
+            },
+            timestamp: pos.timestamp ?? Date.now(),
+          };
+        }
       } catch (err: any) {
         console.warn('Capacitor native getCurrentPosition failed, falling back:', err);
       }
