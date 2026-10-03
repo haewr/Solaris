@@ -6,6 +6,8 @@ import {
   Plane,
   CheckCircle2,
   Calendar,
+  MapPinOff,
+  X,
 } from 'lucide-react';
 import { AppSettings, DegradationProfile } from '../../types/nativeSolaris';
 import { encryptedStorage } from '../../services/encryptedStorageService';
@@ -16,12 +18,14 @@ interface SettingsTabProps {
   settings: AppSettings;
   onUpdateSettings: (settings: AppSettings) => void;
   onResetAllData: () => void;
+  onDeleteLocation?: () => void;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({
   settings,
   onUpdateSettings,
   onResetAllData,
+  onDeleteLocation,
 }) => {
   const [degProfile, setDegProfile] = useState<DegradationProfile | null>(null);
   const [installDate, setInstallDate] = useState('');
@@ -31,7 +35,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   const [confirmPin, setConfirmPin] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [showWipeConfirm, setShowWipeConfirm] = useState(false);
+  const [showLocationDeleteConfirm, setShowLocationDeleteConfirm] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [locationDeleteNotification, setLocationDeleteNotification] = useState<string | null>(null);
 
   useEffect(() => {
     loadSettingsAndDegradation();
@@ -90,12 +96,22 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     onUpdateSettings({ ...settings, airplaneModeSimulated: enabled });
   };
 
-  const handleRevokeLocation = async () => {
-    // Purge cached siting queries
+  const handleConfirmDeleteLocation = async () => {
+    // Purge cached siting queries & stored coordinates
     encryptedStorage.deleteItem('solaris_last_siting_location');
+    try {
+      localStorage.removeItem('solaris_location');
+      localStorage.removeItem('solaris_nasa_data');
+    } catch {}
+
     onUpdateSettings({ ...settings, locationPermissionGranted: false });
-    setSaveSuccessMsg('Location cache cleared & permission reset.');
-    setTimeout(() => setSaveSuccessMsg(null), 3000);
+    if (onDeleteLocation) {
+      onDeleteLocation();
+    }
+
+    setShowLocationDeleteConfirm(false);
+    setLocationDeleteNotification('Saved location and siting cache deleted successfully.');
+    setTimeout(() => setLocationDeleteNotification(null), 4000);
   };
 
   const handleFullWipe = () => {
@@ -106,9 +122,25 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
   return (
     <div className="space-y-4 pb-6" id="solaris-settings-tab">
+      {/* Location Deletion Notification Banner */}
+      {locationDeleteNotification && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center justify-between gap-2 shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <MapPinOff className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{locationDeleteNotification}</span>
+          </div>
+          <button
+            onClick={() => setLocationDeleteNotification(null)}
+            className="p-1 rounded-lg hover:bg-amber-100 text-amber-700 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {saveSuccessMsg && (
-        <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2 shadow-xs animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{saveSuccessMsg}</span>
         </div>
       )}
@@ -207,7 +239,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
       </div>
 
-      {/* 3. Local Biometric & Device Lock */}
+      {/* 3. App Lock */}
       <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -216,9 +248,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </div>
             <div>
               <span className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
-                Local Device Gate Lock
+                App Lock
               </span>
-              <span className="text-[10px] text-slate-500 font-medium">Biometric & 4-digit PIN</span>
+              <span className="text-[10px] text-slate-500 font-medium">4-digit PIN protection</span>
             </div>
           </div>
 
@@ -278,32 +310,33 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         )}
       </div>
 
-      {/* 4. Philippines Data Privacy Act (RA 10173) & Purge Controls */}
+      {/* 4. Privacy & Storage Controls */}
       <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-3.5">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
             <Shield className="w-4 h-4" />
           </div>
           <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-            Privacy Compliance (RA 10173)
+            Privacy & Storage Controls
           </span>
         </div>
 
         <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 space-y-1.5 leading-relaxed">
           <p>
-            <strong>Philippines Data Privacy Act of 2012 (RA 10173):</strong> All location fixes, roof dimensions, and assessment figures remain strictly on this device in encrypted local storage.
+            All location coordinates, roof dimensions, and assessment figures remain strictly on this device in encrypted local storage.
           </p>
           <p className="text-slate-500">
-            The only external network communications are read-only scientific queries to <strong>NASA POWER</strong> (satellite solar irradiance) and <strong>forecast.solar</strong> (sky forecast).
+            External network communications are limited to read-only scientific queries to <strong>NASA POWER</strong> (solar irradiance) and <strong>forecast.solar</strong> (daylight forecast).
           </p>
         </div>
 
         <div className="flex gap-2 pt-1">
           <button
-            onClick={handleRevokeLocation}
-            className="flex-1 py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors text-center"
+            onClick={() => setShowLocationDeleteConfirm(true)}
+            className="flex-1 py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors text-center flex items-center justify-center gap-1.5"
           >
-            Clear Location Cache
+            <MapPinOff className="w-3.5 h-3.5 text-slate-500" />
+            <span>Delete Saved Location</span>
           </button>
           <button
             onClick={() => setShowWipeConfirm(true)}
@@ -315,10 +348,41 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
       </div>
 
+      {/* Location Deletion Confirmation Modal */}
+      {showLocationDeleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 max-w-xs w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+              <MapPinOff className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-sm font-bold text-slate-900">Delete Saved Location?</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Are you sure you want to delete your saved location? This will clear your rooftop coordinates and reset your solar siting cache.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setShowLocationDeleteConfirm(false)}
+                className="w-1/2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeleteLocation}
+                className="w-1/2 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Wipe Confirmation Modal */}
       {showWipeConfirm && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-5 max-w-xs w-full shadow-2xl border border-slate-200 space-y-4">
+          <div className="bg-white rounded-3xl p-5 max-w-xs w-full shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
             <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Fingerprint, Lock, KeyRound, AlertCircle } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { biometricLockService } from '../../services/biometricLockService';
 
 interface BiometricLockModalProps {
@@ -35,18 +35,6 @@ export const BiometricLockModal: React.FC<BiometricLockModalProps> = ({ onUnlock
     setError(null);
   };
 
-  const handleBiometricPrompt = async () => {
-    setIsVerifying(true);
-    setError(null);
-    const success = await biometricLockService.promptBiometric();
-    setIsVerifying(false);
-    if (success) {
-      onUnlockSuccess();
-    } else {
-      setError('Biometric authentication did not complete. Please enter your 4-digit device PIN.');
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-white select-none">
       <div className="w-full max-w-xs flex flex-col items-center space-y-6 animate-in fade-in zoom-in-95">
@@ -56,8 +44,8 @@ export const BiometricLockModal: React.FC<BiometricLockModalProps> = ({ onUnlock
         </div>
 
         <div className="text-center space-y-1">
-          <h2 className="text-xl font-bold font-['Space_Grotesk'] text-slate-100">Solaris Device Gate</h2>
-          <p className="text-xs text-slate-400">Local biometric & passcode lock</p>
+          <h2 className="text-xl font-bold font-['Space_Grotesk'] text-slate-100">Solaris App Lock</h2>
+          <p className="text-xs text-slate-400">Enter your 4-digit PIN</p>
         </div>
 
         {/* PIN Indicators (4 dots) */}
@@ -80,37 +68,30 @@ export const BiometricLockModal: React.FC<BiometricLockModalProps> = ({ onUnlock
           </div>
         )}
 
-        {/* Biometric trigger button */}
-        <button
-          onClick={handleBiometricPrompt}
-          disabled={isVerifying}
-          className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold transition-all active:scale-95"
-        >
-          <Fingerprint className="w-4 h-4 text-indigo-400" />
-          <span>Unlock with Biometrics</span>
-        </button>
-
         {/* Numeric Keypad (44x44+ touch targets) */}
         <div className="grid grid-cols-3 gap-3 w-full pt-2">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
             <button
               key={num}
+              disabled={isVerifying}
               onClick={() => handlePinInput(num)}
-              className="h-14 rounded-2xl bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600/40 text-lg font-bold text-slate-100 transition-all active:scale-95 flex items-center justify-center border border-slate-700/50"
+              className="h-14 rounded-2xl bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600/40 text-lg font-bold text-slate-100 transition-all active:scale-95 flex items-center justify-center border border-slate-700/50 disabled:opacity-50"
             >
               {num}
             </button>
           ))}
           <div />
           <button
+            disabled={isVerifying}
             onClick={() => handlePinInput('0')}
-            className="h-14 rounded-2xl bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600/40 text-lg font-bold text-slate-100 transition-all active:scale-95 flex items-center justify-center border border-slate-700/50"
+            className="h-14 rounded-2xl bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600/40 text-lg font-bold text-slate-100 transition-all active:scale-95 flex items-center justify-center border border-slate-700/50 disabled:opacity-50"
           >
             0
           </button>
           <button
+            disabled={isVerifying}
             onClick={handleDeleteDigit}
-            className="h-14 rounded-2xl bg-slate-800/50 hover:bg-slate-700/80 active:bg-slate-700 text-xs font-semibold text-slate-300 transition-all active:scale-95 flex items-center justify-center border border-slate-700/40"
+            className="h-14 rounded-2xl bg-slate-800/50 hover:bg-slate-700/80 active:bg-slate-700 text-xs font-semibold text-slate-300 transition-all active:scale-95 flex items-center justify-center border border-slate-700/40 disabled:opacity-50"
           >
             Delete
           </button>

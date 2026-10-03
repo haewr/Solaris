@@ -17,11 +17,18 @@ import { degradationService } from './degradationService';
 const FORECAST_CACHE_KEY = 'solaris_forecast_solar_cache';
 const RATE_LIMIT_STORAGE_KEY = 'solaris_forecast_solar_rate_history';
 const MAX_CALLS_PER_HOUR = 12;
-const POLLING_INTERVAL_MS = 15 * 60 * 1000;
+const POLLING_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 const CACHE_FRESHNESS_MS = 15 * 60 * 1000;
+
+export const isDaytimeHours = (date: Date = new Date()): boolean => {
+  const h = date.getHours();
+  return h >= 6 && h <= 18; // 6:00 AM to 6:59 PM
+};
 
 export class ForecastSolarService {
   private timerId: any = null;
+  private worker: Worker | null = null;
+  private lastPollTimestamp = 0;
   private isPollingActive = false;
   private visibilityListenerAttached = false;
   private currentParams: {
@@ -236,13 +243,29 @@ export class ForecastSolarService {
     this.onErrorCallback = onError;
     this.isPollingActive = true;
 
+    // Trigger immediate first fetch
     this.executeSinglePoll();
 
+    // Standard interval timer
     this.timerId = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        this.executeSinglePoll();
-      }
+      this.executeDaytimePoll();
     }, POLLING_INTERVAL_MS);
+
+    // Background Web Worker timer: keeps 15-minute polling active even if the tab or screen is backgrounded
+    if (typeof window !== 'undefined' && typeof Worker !== 'undefined') {
+      try {
+        const workerBlob = new Blob(
+          [`setInterval(() => { postMessage('tick'); }, ${POLLING_INTERVAL_MS});`],
+          { type: 'application/javascript' }
+        );
+        this.worker = new Worker(URL.createObjectURL(workerBlob));
+        this.worker.onmessage = () => {
+          this.executeDaytimePoll();
+        };
+      } catch {
+        // Continue with standard timer fallback
+      }
+    }
 
     if (!this.visibilityListenerAttached && typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', this.handleVisibilityChange);
@@ -254,6 +277,10 @@ export class ForecastSolarService {
     if (this.timerId) {
       clearInterval(this.timerId);
       this.timerId = null;
+    }
+    if (this.worker) {
+      this.worker.terminate();
+      this.worker = null;
     }
     this.isPollingActive = false;
     this.currentParams = null;
@@ -267,24 +294,29 @@ export class ForecastSolarService {
   }
 
   private handleVisibilityChange = (): void => {
-    if (document.visibilityState === 'hidden') {
-      if (this.timerId) {
-        clearInterval(this.timerId);
-        this.timerId = null;
-      }
-    } else if (document.visibilityState === 'visible' && this.isPollingActive) {
-      this.executeSinglePoll();
-      if (!this.timerId) {
-        this.timerId = setInterval(() => {
-          this.executeSinglePoll();
-        }, POLLING_INTERVAL_MS);
+    // When returning to the foreground during daytime (6am - 6pm),
+    // refresh immediately if more than 15 minutes elapsed since the last poll
+    if (document.visibilityState === 'visible' && this.isPollingActive) {
+      if (isDaytimeHours() && Date.now() - this.lastPollTimestamp >= POLLING_INTERVAL_MS) {
+        this.executeSinglePoll();
       }
     }
   };
 
+  /**
+   * Only executes outbound poll during 6:00 AM - 6:00 PM daytime solar production window
+   */
+  private executeDaytimePoll(): void {
+    if (!this.isPollingActive) return;
+    if (isDaytimeHours()) {
+      this.executeSinglePoll();
+    }
+  }
+
   private async executeSinglePoll(): Promise<void> {
     if (!this.currentParams || !this.onUpdateCallback) return;
     try {
+      this.lastPollTimestamp = Date.now();
       const { lat, lng, tilt, azimuth, kwp } = this.currentParams;
       const res = await this.fetchForecast(lat, lng, tilt, azimuth, kwp);
       this.onUpdateCallback(res.data, res.fromCache);

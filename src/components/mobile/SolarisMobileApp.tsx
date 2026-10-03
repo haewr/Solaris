@@ -285,6 +285,10 @@ export const SolarisMobileApp: React.FC = () => {
             settings={settings}
             onUpdateSettings={setSettings}
             onResetAllData={handleResetAllData}
+            onDeleteLocation={() => {
+              setLocation(null);
+              setNasaData(null);
+            }}
           />
         )}
       </main>

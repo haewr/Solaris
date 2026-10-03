@@ -268,6 +268,51 @@ export const LiveTab: React.FC<LiveTabProps> = ({
 
   const maxPeakWatts = Math.max(1, todayForecast.peakWatts, nextDayForecast.peakWatts);
 
+  // 6 AM - 6 PM Daytime Hourly Generation Tally
+  const currentHour = new Date().getHours();
+  let daytimePeakWatts = 0;
+  let daytimePeakTime = '12:00 PM';
+
+  const daytimeHourlyTally = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((h) => {
+    const hour2Digits = h.toString().padStart(2, '0');
+    const hourStr = `${hour2Digits}:00`;
+    const ampm = h === 12 ? '12 PM' : h > 12 ? `${h - 12} PM` : `${h} AM`;
+
+    let matchingWatts = 0;
+    if (forecastData?.watts) {
+      for (const [timeStr, val] of Object.entries(forecastData.watts)) {
+        if (timeStr.startsWith(todayKey)) {
+          const timePart = timeStr.includes('T') ? timeStr.split('T')[1] : timeStr.split(' ')[1] || '';
+          const pointHour = parseInt(timePart.substring(0, 2), 10);
+          if (pointHour === h) {
+            matchingWatts = typeof val === 'number' ? val : Number(val) || 0;
+            break;
+          }
+        }
+      }
+    }
+
+    if (matchingWatts > daytimePeakWatts) {
+      daytimePeakWatts = matchingWatts;
+      daytimePeakTime = ampm;
+    }
+
+    const isCurrent = h === currentHour;
+    const isPast = h < currentHour;
+
+    return {
+      hour: h,
+      timeLabel: ampm,
+      hourFormatted: hourStr,
+      watts: matchingWatts,
+      kw: Math.round((matchingWatts / 1000) * 10) / 10,
+      isCurrent,
+      isPast,
+    };
+  });
+
+  const peakForCalc = Math.max(1, daytimePeakWatts, maxWattsToday);
+
   return (
     <div className="space-y-4 pb-6" id="solaris-live-tab">
       {/* Offline Cached Warning Banner */}
@@ -344,31 +389,82 @@ export const LiveTab: React.FC<LiveTabProps> = ({
           )}
         </div>
 
-        {/* Daily Total & Peak - Energy consistently kept at kWh */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-0.5">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-              Total Energy Today
-            </span>
-            <div className="flex items-baseline gap-1">
-              <span className="text-xl font-bold font-['Space_Grotesk'] text-slate-900">
-                {todayTotalKwh.toFixed(1)}
+        {/* Hourly Tally of Generation Estimates from 6:00 AM - 6:00 PM */}
+        <div className="space-y-2.5 pt-1">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                Daytime Hourly Tally (6 AM – 6 PM)
               </span>
-              <span className="text-xs font-semibold text-slate-600">kWh</span>
+            </div>
+            <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>15m auto-sync</span>
+            </span>
+          </div>
+
+          {/* Horizontally Scrollable 13-hour Daytime Grid */}
+          <div className="overflow-x-auto pb-1.5 -mx-1 px-1 scrollbar-none">
+            <div className="grid grid-flow-col auto-cols-[74px] sm:auto-cols-[82px] gap-2 min-w-full">
+              {daytimeHourlyTally.map((item) => {
+                const heightPct = Math.max(8, Math.round((item.watts / peakForCalc) * 100));
+                return (
+                  <div
+                    key={item.hour}
+                    className={`p-2.5 rounded-2xl flex flex-col items-center justify-between text-center transition-all ${
+                      item.isCurrent
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25 ring-2 ring-indigo-400'
+                        : item.isPast
+                        ? 'bg-slate-50 text-slate-600 border border-slate-200/80'
+                        : 'bg-white text-slate-800 border border-slate-200 shadow-2xs'
+                    }`}
+                  >
+                    <span className={`text-[10px] font-bold font-mono block ${item.isCurrent ? 'text-indigo-100' : 'text-slate-600'}`}>
+                      {item.timeLabel}
+                    </span>
+
+                    {item.isCurrent ? (
+                      <span className="my-0.5 text-[8px] font-extrabold uppercase px-1.5 py-0.2 rounded-full bg-emerald-400 text-emerald-950 tracking-wider">
+                        Now
+                      </span>
+                    ) : (
+                      <span className="my-0.5 text-[8px] text-transparent select-none">
+                        --
+                      </span>
+                    )}
+
+                    {/* Mini Bar */}
+                    <div className="w-full h-8 flex items-end justify-center my-1 px-1">
+                      <div
+                        className={`w-4 rounded-t-md transition-all ${
+                          item.isCurrent
+                            ? 'bg-amber-300'
+                            : item.isPast
+                            ? 'bg-slate-300'
+                            : 'bg-amber-400'
+                        }`}
+                        style={{ height: `${heightPct}%` }}
+                      />
+                    </div>
+
+                    <div className="leading-tight">
+                      <span className={`text-xs font-black font-['Space_Grotesk'] block ${item.isCurrent ? 'text-white' : 'text-slate-900'}`}>
+                        {item.watts >= 1000 ? `${(item.watts / 1000).toFixed(1)}k` : item.watts.toLocaleString()}
+                      </span>
+                      <span className={`text-[9px] font-medium block ${item.isCurrent ? 'text-indigo-200' : 'text-slate-400'}`}>
+                        Watts
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-0.5">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-              Peak Expected Hour
-            </span>
-            <div className="flex items-baseline gap-1">
-              <span className="text-xl font-bold font-['Space_Grotesk'] text-indigo-700">
-                {(maxWattsToday / 1000).toFixed(1)}
-              </span>
-              <span className="text-xs font-semibold text-slate-600">kW</span>
-              <span className="text-[10px] text-slate-500 font-mono ml-0.5">@{nextPeakTime || '12:00'}</span>
-            </div>
+          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5 font-medium px-0.5">
+            <span>Daylight Window: <strong>6:00 AM – 6:00 PM</strong></span>
+            <span>Peak Daytime: <strong>{(daytimePeakWatts / 1000).toFixed(1)} kW</strong> ({daytimePeakTime})</span>
           </div>
         </div>
       </div>
