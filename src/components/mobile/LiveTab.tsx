@@ -7,6 +7,7 @@ import {
   TrendingUp,
   TrendingDown,
   Loader2,
+  Check,
 } from 'lucide-react';
 import {
   ForecastSolarPayload,
@@ -274,8 +275,8 @@ export const LiveTab: React.FC<LiveTabProps> = ({
   let daytimePeakTime = '12:00 PM';
 
   const daytimeHourlyTally = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((h) => {
-    const hour2Digits = h.toString().padStart(2, '0');
-    const hourStr = `${hour2Digits}:00`;
+    const h12 = h === 12 ? 12 : h > 12 ? h - 12 : h;
+    const hourFormatted12 = `${h12.toString().padStart(2, '0')}:00 ${h >= 12 ? 'PM' : 'AM'}`;
     const ampm = h === 12 ? '12 PM' : h > 12 ? `${h - 12} PM` : `${h} AM`;
 
     let matchingWatts = 0;
@@ -303,15 +304,19 @@ export const LiveTab: React.FC<LiveTabProps> = ({
     return {
       hour: h,
       timeLabel: ampm,
-      hourFormatted: hourStr,
+      hourFormatted12,
       watts: matchingWatts,
-      kw: Math.round((matchingWatts / 1000) * 10) / 10,
+      kwhStr: `${(matchingWatts / 1000).toFixed(2)} kWh`,
       isCurrent,
       isPast,
     };
   });
 
   const peakForCalc = Math.max(1, daytimePeakWatts, maxWattsToday);
+  const daytimeTotalKwh =
+    todayTotalKwh > 0
+      ? todayTotalKwh
+      : Math.round(daytimeHourlyTally.reduce((sum, item) => sum + item.watts / 1000, 0) * 10) / 10;
 
   return (
     <div className="space-y-4 pb-6" id="solaris-live-tab">
@@ -389,82 +394,102 @@ export const LiveTab: React.FC<LiveTabProps> = ({
           )}
         </div>
 
-        {/* Hourly Tally of Generation Estimates from 6:00 AM - 6:00 PM */}
-        <div className="space-y-2.5 pt-1">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-indigo-600" />
-              <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
-                Daytime Hourly Tally (6 AM – 6 PM)
+        {/* Hourly Tally of Generation Estimates from 6:00 AM - 6:00 PM (Row Layout) */}
+        <div className="space-y-3 pt-1">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                HOURLY GENERATION TALLY
+              </span>
+              <span className="text-xs font-semibold text-slate-400">
+                (6 AM – 6 PM)
               </span>
             </div>
-            <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>15m auto-sync</span>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold font-['Space_Grotesk'] bg-amber-100/90 text-amber-900 border border-amber-200/60 shadow-2xs whitespace-nowrap">
+              {daytimeTotalKwh.toFixed(1)} kWh Daytime Est.
             </span>
           </div>
 
-          {/* Horizontally Scrollable 13-hour Daytime Grid */}
-          <div className="overflow-x-auto pb-1.5 -mx-1 px-1 scrollbar-none">
-            <div className="grid grid-flow-col auto-cols-[74px] sm:auto-cols-[82px] gap-2 min-w-full">
-              {daytimeHourlyTally.map((item) => {
-                const heightPct = Math.max(8, Math.round((item.watts / peakForCalc) * 100));
-                return (
-                  <div
-                    key={item.hour}
-                    className={`p-2.5 rounded-2xl flex flex-col items-center justify-between text-center transition-all ${
-                      item.isCurrent
-                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25 ring-2 ring-indigo-400'
-                        : item.isPast
-                        ? 'bg-slate-50 text-slate-600 border border-slate-200/80'
-                        : 'bg-white text-slate-800 border border-slate-200 shadow-2xs'
-                    }`}
-                  >
-                    <span className={`text-[10px] font-bold font-mono block ${item.isCurrent ? 'text-indigo-100' : 'text-slate-600'}`}>
-                      {item.timeLabel}
-                    </span>
+          {/* Subheader status bar */}
+          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-2.5 px-3 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span className="text-slate-700 font-medium">
+                {currentHour >= 18
+                  ? 'Post-sunset total: '
+                  : currentHour < 6
+                  ? 'Pre-dawn estimate: '
+                  : 'Daytime tally: '}
+                <strong className="font-bold text-slate-900">{daytimeTotalKwh.toFixed(1)} kWh</strong>
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-mono">15m background sync</span>
+          </div>
 
-                    {item.isCurrent ? (
-                      <span className="my-0.5 text-[8px] font-extrabold uppercase px-1.5 py-0.2 rounded-full bg-emerald-400 text-emerald-950 tracking-wider">
-                        Now
-                      </span>
+          {/* Vertically Stacked Rows */}
+          <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+            {daytimeHourlyTally.map((item) => {
+              const intensity = Math.max(4, Math.round((item.watts / peakForCalc) * 100));
+              return (
+                <div
+                  key={item.hour}
+                  className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-2.5 ${
+                    item.isCurrent
+                      ? 'bg-indigo-50/60 border-indigo-300 ring-1 ring-indigo-400/80 shadow-xs'
+                      : 'bg-white border-slate-200/80 shadow-2xs hover:border-slate-300'
+                  }`}
+                >
+                  {/* Left: Checkmark + Time + Status */}
+                  <div className="flex items-center gap-2.5 min-w-[105px] sm:min-w-[125px]">
+                    {item.isPast ? (
+                      <Check className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    ) : item.isCurrent ? (
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200 shrink-0 animate-pulse" />
                     ) : (
-                      <span className="my-0.5 text-[8px] text-transparent select-none">
-                        --
-                      </span>
+                      <Check className="w-3.5 h-3.5 text-slate-300 shrink-0 opacity-50" />
                     )}
-
-                    {/* Mini Bar */}
-                    <div className="w-full h-8 flex items-end justify-center my-1 px-1">
-                      <div
-                        className={`w-4 rounded-t-md transition-all ${
-                          item.isCurrent
-                            ? 'bg-amber-300'
-                            : item.isPast
-                            ? 'bg-slate-300'
-                            : 'bg-amber-400'
-                        }`}
-                        style={{ height: `${heightPct}%` }}
-                      />
-                    </div>
-
-                    <div className="leading-tight">
-                      <span className={`text-xs font-black font-['Space_Grotesk'] block ${item.isCurrent ? 'text-white' : 'text-slate-900'}`}>
-                        {item.watts >= 1000 ? `${(item.watts / 1000).toFixed(1)}k` : item.watts.toLocaleString()}
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 font-mono block leading-tight">
+                        {item.hourFormatted12}
                       </span>
-                      <span className={`text-[9px] font-medium block ${item.isCurrent ? 'text-indigo-200' : 'text-slate-400'}`}>
-                        Watts
+                      <span
+                        className={`text-[10px] font-medium block ${
+                          item.isCurrent ? 'text-indigo-600 font-bold' : 'text-slate-400'
+                        }`}
+                      >
+                        {item.isPast ? 'Recorded' : item.isCurrent ? 'Active' : 'Recorded'}
                       </span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
 
-          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5 font-medium px-0.5">
-            <span>Daylight Window: <strong>6:00 AM – 6:00 PM</strong></span>
-            <span>Peak Daytime: <strong>{(daytimePeakWatts / 1000).toFixed(1)} kW</strong> ({daytimePeakTime})</span>
+                  {/* Middle: Horizontal pill progress bar */}
+                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden mx-1.5 sm:mx-3 max-w-[160px] sm:max-w-[240px]">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        item.isCurrent
+                          ? 'bg-indigo-500'
+                          : item.isPast
+                          ? 'bg-slate-300'
+                          : 'bg-slate-200'
+                      }`}
+                      style={{ width: `${intensity}%` }}
+                    />
+                  </div>
+
+                  {/* Right: Watts + kWh */}
+                  <div className="text-right min-w-[70px] sm:min-w-[85px]">
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-900 font-mono block leading-tight">
+                      {item.watts.toLocaleString()} W
+                    </span>
+                    <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 font-mono block">
+                      {item.kwhStr}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
